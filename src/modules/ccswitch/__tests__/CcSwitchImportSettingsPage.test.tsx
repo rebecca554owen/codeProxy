@@ -84,6 +84,25 @@ describe("CcSwitchImportSettingsPage", () => {
     expect(screen.getByText(/1 saved preset/i)).toBeInTheDocument();
   });
 
+  test("previews the full BaseURL request address while editing endpoint path", async () => {
+    renderPage();
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole("button", { name: /new config/i }));
+
+    const dialog = await screen.findByRole("dialog", { name: /new cc switch config/i });
+    const endpointPreview = within(dialog).getByTestId("ccswitch-config-endpoint-preview");
+    const origin = window.location.origin;
+
+    expect(endpointPreview).toHaveTextContent(`${origin}/v1`);
+
+    const endpointInput = within(dialog).getByLabelText(/codex endpoint path/i);
+    await user.clear(endpointInput);
+    await user.type(endpointInput, "/openai/v1");
+
+    expect(endpointPreview).toHaveTextContent(`${origin}/openai/v1`);
+  });
+
   test("renders legacy client defaults as migrated list rows", async () => {
     window.localStorage.setItem(
       "ccswitch.importSettings.v1",

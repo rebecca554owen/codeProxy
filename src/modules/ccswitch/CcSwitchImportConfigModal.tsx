@@ -13,6 +13,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/modules/ui/Tabs";
 import {
   CC_SWITCH_CLIENTS,
   getCcSwitchClientConfig,
+  resolveCcSwitchImportConfig,
   type CcSwitchClientType,
 } from "@/modules/ccswitch/ccswitchImport";
 import {
@@ -59,6 +60,7 @@ export function CcSwitchImportConfigModal({
   open,
   mode,
   value,
+  baseUrl,
   channelGroupOptions,
   channelGroupsLoading,
   onClose,
@@ -67,6 +69,7 @@ export function CcSwitchImportConfigModal({
   open: boolean;
   mode: "create" | "edit";
   value: ConfigDraft;
+  baseUrl: string;
   channelGroupOptions: { value: string; label: string }[];
   channelGroupsLoading: boolean;
   onClose: () => void;
@@ -95,6 +98,29 @@ export function CcSwitchImportConfigModal({
   const modelOptions = useMemo(() => buildModelOptions(draft.clientType), [draft.clientType]);
   const client = getCcSwitchClientConfig(draft.clientType);
   const clientLabel = t(client.labelKey);
+  const endpointPreview = useMemo(
+    () =>
+      resolveCcSwitchImportConfig({
+        baseUrl,
+        clientType: draft.clientType,
+        settings: {
+          [draft.clientType]: {
+            endpointPath: draft.endpointPath,
+            defaultModel: draft.defaultModel,
+            usageAutoInterval: draft.usageAutoInterval,
+            apiKeyField: draft.apiKeyField,
+          },
+        },
+      }).endpoint,
+    [
+      baseUrl,
+      draft.apiKeyField,
+      draft.clientType,
+      draft.defaultModel,
+      draft.endpointPath,
+      draft.usageAutoInterval,
+    ],
+  );
   const setClientType = (clientType: CcSwitchClientType) => {
     const defaults = DEFAULT_CC_SWITCH_IMPORT_SETTINGS[clientType];
     const fallbackModel = modelOptionsByClient[clientType][0] ?? "";
@@ -104,9 +130,7 @@ export function CcSwitchImportConfigModal({
       endpointPath:
         current.clientType === clientType ? current.endpointPath : defaults.endpointPath,
       usageAutoInterval:
-        current.clientType === clientType
-          ? current.usageAutoInterval
-          : defaults.usageAutoInterval,
+        current.clientType === clientType ? current.usageAutoInterval : defaults.usageAutoInterval,
       defaultModel:
         current.clientType === clientType
           ? current.defaultModel
@@ -130,7 +154,7 @@ export function CcSwitchImportConfigModal({
       open={open}
       title={t(mode === "create" ? "ccswitch.config_modal_create" : "ccswitch.config_modal_edit")}
       description={t("ccswitch.config_modal_description")}
-      maxWidth="max-w-3xl"
+      maxWidth="max-w-4xl"
       bodyClassName="bg-slate-50/45 dark:bg-neutral-950/45"
       onClose={onClose}
       footer={
@@ -144,7 +168,7 @@ export function CcSwitchImportConfigModal({
         </>
       }
     >
-      <div className="space-y-3.5">
+      <div className="space-y-4">
         <Tabs
           value={draft.clientType}
           onValueChange={(next) => setClientType(next as CcSwitchClientType)}
@@ -165,94 +189,108 @@ export function CcSwitchImportConfigModal({
           </TabsList>
         </Tabs>
 
-        <section className="min-h-[76px] rounded-2xl border border-slate-200/75 bg-white p-3.5 shadow-[0_1px_2px_rgb(15_23_42_/_0.035)] dark:border-neutral-800 dark:bg-neutral-950/70">
-          {draft.clientType === "claude" ? (
-            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(220px,0.95fr)] sm:items-center">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200/75 bg-slate-50 dark:border-neutral-800 dark:bg-neutral-900">
-                    <img src={iconByType.claude} alt="" className="h-5 w-5" />
-                  </span>
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-semibold text-slate-900 dark:text-white">
-                      {clientLabel}
-                    </div>
-                    <div className="truncate text-xs text-slate-500 dark:text-white/55">
-                      {t(client.descriptionKey)}
-                    </div>
+        <section className="overflow-hidden rounded-3xl border border-slate-200/80 bg-white shadow-[0_18px_44px_rgb(15_23_42_/_0.06)] dark:border-neutral-800 dark:bg-neutral-950/80">
+          <div className="grid gap-0 lg:grid-cols-[minmax(240px,0.72fr)_minmax(0,1.28fr)]">
+            <div className="border-b border-slate-200/75 bg-slate-50/70 p-4 dark:border-neutral-800 dark:bg-neutral-900/35 lg:border-b-0 lg:border-r">
+              <div className="flex items-start gap-3">
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-slate-200/75 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-950">
+                  <img src={iconByType[draft.clientType]} alt="" className="h-7 w-7" />
+                </span>
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-slate-950 dark:text-white">
+                    {clientLabel}
+                  </div>
+                  <div className="mt-1 text-xs leading-5 text-slate-500 dark:text-white/55">
+                    {t(client.descriptionKey)}
                   </div>
                 </div>
               </div>
-              <label className="block space-y-1.5">
-                <span className={labelClassName}>
-                  {t("ccswitch.settings_auth_field", { client: clientLabel })}
-                </span>
-                <Select
-                  value={draft.apiKeyField ?? "ANTHROPIC_API_KEY"}
-                  onChange={(next) =>
-                    setDraft((current) => ({
-                      ...current,
-                      apiKeyField: normalizeCcSwitchClaudeAuthField(next) as CcSwitchClaudeAuthField,
-                    }))
-                  }
-                  options={authFieldOptions}
-                  aria-label={t("ccswitch.settings_auth_field", { client: clientLabel })}
-                  className={controlClassName}
-                />
-              </label>
+
+              {draft.clientType === "claude" ? (
+                <label className="mt-4 block space-y-1.5">
+                  <span className={labelClassName}>
+                    {t("ccswitch.settings_auth_field", { client: clientLabel })}
+                  </span>
+                  <Select
+                    value={draft.apiKeyField ?? "ANTHROPIC_API_KEY"}
+                    onChange={(next) =>
+                      setDraft((current) => ({
+                        ...current,
+                        apiKeyField: normalizeCcSwitchClaudeAuthField(
+                          next,
+                        ) as CcSwitchClaudeAuthField,
+                      }))
+                    }
+                    options={authFieldOptions}
+                    aria-label={t("ccswitch.settings_auth_field", { client: clientLabel })}
+                    className={controlClassName}
+                  />
+                </label>
+              ) : null}
             </div>
-          ) : (
-            <div className="flex min-h-[54px] items-center gap-3">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200/75 bg-slate-50 dark:border-neutral-800 dark:bg-neutral-900">
-                <img src={iconByType[draft.clientType]} alt="" className="h-6 w-6" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-semibold text-slate-900 dark:text-white">
-                  {clientLabel}
+
+            <div className="space-y-4 p-4">
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className={labelClassName}>{t("ccswitch.config_full_base_url")}</span>
+                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:border-emerald-500/25 dark:bg-emerald-500/10 dark:text-emerald-300">
+                    {t("ccswitch.config_live_preview")}
+                  </span>
                 </div>
-                <div className="mt-0.5 text-xs leading-5 text-slate-500 dark:text-white/55">
-                  {t(client.descriptionKey)}
+                <div
+                  data-testid="ccswitch-config-endpoint-preview"
+                  className="overflow-x-auto rounded-2xl border border-slate-200/80 bg-slate-950 px-3 py-2.5 font-mono text-sm text-emerald-200 shadow-inner dark:border-neutral-800"
+                >
+                  {endpointPreview || "--"}
                 </div>
+                <p className="text-xs leading-5 text-slate-500 dark:text-white/50">
+                  {t("ccswitch.config_full_base_url_hint", {
+                    baseUrl: baseUrl || "--",
+                  })}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(180px,0.62fr)]">
+                <label className={fieldClassName}>
+                  <span className={labelClassName}>
+                    {t("ccswitch.settings_endpoint_path", { client: clientLabel })}
+                  </span>
+                  <TextInput
+                    value={draft.endpointPath}
+                    onChange={(event) => {
+                      const nextValue = event.currentTarget.value;
+                      setDraft((current) => ({ ...current, endpointPath: nextValue }));
+                    }}
+                    placeholder={t("ccswitch.settings_endpoint_path_placeholder")}
+                    aria-label={t("ccswitch.settings_endpoint_path", { client: clientLabel })}
+                    className={controlClassName}
+                  />
+                </label>
+                <label className={fieldClassName}>
+                  <span className={labelClassName}>
+                    {t("ccswitch.settings_usage_interval", { client: clientLabel })}
+                  </span>
+                  <TextInput
+                    type="number"
+                    min={1}
+                    inputMode="numeric"
+                    value={String(draft.usageAutoInterval)}
+                    onChange={(event) => {
+                      const parsed = Number(event.currentTarget.value);
+                      setDraft((current) => ({
+                        ...current,
+                        usageAutoInterval: Number.isFinite(parsed)
+                          ? parsed
+                          : current.usageAutoInterval,
+                      }));
+                    }}
+                    placeholder="30"
+                    aria-label={t("ccswitch.settings_usage_interval", { client: clientLabel })}
+                    className={controlClassName}
+                  />
+                </label>
               </div>
             </div>
-          )}
-          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(180px,0.62fr)]">
-            <label className={fieldClassName}>
-              <span className={labelClassName}>
-                {t("ccswitch.settings_endpoint_path", { client: clientLabel })}
-              </span>
-              <TextInput
-                value={draft.endpointPath}
-                onChange={(event) => {
-                  const nextValue = event.currentTarget.value;
-                  setDraft((current) => ({ ...current, endpointPath: nextValue }));
-                }}
-                placeholder={t("ccswitch.settings_endpoint_path_placeholder")}
-                aria-label={t("ccswitch.settings_endpoint_path", { client: clientLabel })}
-                className={controlClassName}
-              />
-            </label>
-            <label className={fieldClassName}>
-              <span className={labelClassName}>
-                {t("ccswitch.settings_usage_interval", { client: clientLabel })}
-              </span>
-              <TextInput
-                type="number"
-                min={1}
-                inputMode="numeric"
-                value={String(draft.usageAutoInterval)}
-                onChange={(event) => {
-                  const parsed = Number(event.currentTarget.value);
-                  setDraft((current) => ({
-                    ...current,
-                    usageAutoInterval: Number.isFinite(parsed) ? parsed : current.usageAutoInterval,
-                  }));
-                }}
-                placeholder="30"
-                aria-label={t("ccswitch.settings_usage_interval", { client: clientLabel })}
-                className={controlClassName}
-              />
-            </label>
           </div>
         </section>
 
