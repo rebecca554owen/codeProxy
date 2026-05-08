@@ -177,6 +177,7 @@ vi.mock("@/modules/ui/VirtualTable", () => ({
 describe("ApiKeysPage", () => {
   beforeEach(async () => {
     await i18n.changeLanguage("en");
+    window.localStorage.clear();
     state.entries = [
       {
         key: "sk-existing-1234567890",
@@ -662,6 +663,103 @@ describe("ApiKeysPage", () => {
     expect(parsed.searchParams.get("endpoint")).toBe("http://localhost:3000/team-a");
     expect(parsed.searchParams.get("model")).toBe("claude-sonnet-4-5");
     expect(parsed.searchParams.get("apiKeyField")).toBe("ANTHROPIC_API_KEY");
+
+    openSpy.mockRestore();
+  });
+
+  test("applies the selected saved CC Switch preset in the import modal", async () => {
+    const openSpy = vi.spyOn(window, "open").mockReturnValue(null);
+    vi.spyOn(document, "hasFocus").mockReturnValue(false);
+    state.entries = [
+      {
+        key: "sk-preset-1234567890",
+        name: "Preset Key",
+        "allowed-channel-groups": ["team-a", "pro"],
+        "created-at": "2026-04-14T00:00:00.000Z",
+      },
+    ];
+    state.channelGroups = [
+      {
+        name: "team-a",
+        description: "Team A route",
+        "path-routes": ["/team-a"],
+      },
+      {
+        name: "pro",
+        description: "Pro route",
+        "path-routes": ["/pro"],
+      },
+    ];
+    window.localStorage.setItem(
+      "ccswitch.importConfigList.v1",
+      JSON.stringify({
+        version: 1,
+        configs: [
+          {
+            id: "preset-codex-primary",
+            clientType: "codex",
+            providerName: "Primary Codex",
+            note: "Fallback route",
+            defaultModel: "gpt-5.5",
+            allowedChannelGroups: ["team-a"],
+            endpointPath: "/v1",
+            usageAutoInterval: 30,
+          },
+          {
+            id: "preset-codex",
+            clientType: "codex",
+            providerName: "Preset Codex",
+            note: "Primary route",
+            defaultModel: "gpt-5.4",
+            allowedChannelGroups: ["pro", "team-a"],
+            endpointPath: "/openai/v2",
+            usageAutoInterval: 45,
+          },
+        ],
+      }),
+    );
+
+    render(
+      <MemoryRouter>
+        <ThemeProvider>
+          <ToastProvider>
+            <ApiKeysPage />
+          </ToastProvider>
+        </ThemeProvider>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Preset Key")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /import to cc switch/i }));
+    await screen.findByRole("dialog", { name: /import to cc switch/i });
+    await userEvent.click(screen.getByRole("tab", { name: /codex/i }));
+
+    const savedConfigSelect = screen.getByRole("combobox", { name: /saved config/i });
+    await userEvent.click(savedConfigSelect);
+    await userEvent.click(await screen.findByRole("option", { name: /preset codex/i }));
+
+    expect(screen.getByRole("textbox", { name: /provider name/i })).toHaveValue("Preset Codex");
+    expect(screen.getByRole("combobox", { name: /model/i })).toHaveTextContent("gpt-5.4");
+    expect(screen.getByRole("combobox", { name: /allowed channel group/i })).toHaveTextContent(
+      "pro",
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: /import codex/i }));
+
+    await waitFor(() => {
+      expect(openSpy).toHaveBeenCalledWith(
+        expect.stringContaining("ccswitch://v1/import?"),
+        "_self",
+      );
+    });
+
+    const openedUrl = String(openSpy.mock.calls.at(-1)?.[0] ?? "");
+    const parsed = new URL(openedUrl);
+    expect(parsed.searchParams.get("name")).toBe("Preset Codex");
+    expect(parsed.searchParams.get("endpoint")).toBe("http://localhost:3000/pro/openai/v2");
+    expect(parsed.searchParams.get("model")).toBe("gpt-5.4");
+    expect(parsed.searchParams.get("usageAutoInterval")).toBe("45");
 
     openSpy.mockRestore();
   });

@@ -1,6 +1,7 @@
 import type { CcSwitchClientType } from "@/modules/ccswitch/ccswitchImport";
 
 export const CC_SWITCH_IMPORT_SETTINGS_STORAGE_KEY = "ccswitch.importSettings.v1";
+const CC_SWITCH_IMPORT_CONFIG_LIST_STORAGE_KEY = "ccswitch.importConfigList.v1";
 
 export type CcSwitchClaudeAuthField = "ANTHROPIC_API_KEY" | "ANTHROPIC_AUTH_TOKEN";
 
@@ -59,6 +60,29 @@ function normalizeUsageAutoInterval(value: unknown, fallback: number): number {
   return Math.round(parsed);
 }
 
+function deriveSettingsFromConfigListPayload(value: unknown): CcSwitchImportSettings {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return normalizeCcSwitchImportSettings();
+  }
+
+  const rawConfigs = (value as { configs?: unknown }).configs;
+  const configs = Array.isArray(rawConfigs) ? rawConfigs : [];
+  const findClient = (clientType: CcSwitchClientType): CcSwitchImportSettingsInput[CcSwitchClientType] =>
+    configs.find(
+      (entry) =>
+        entry &&
+        typeof entry === "object" &&
+        !Array.isArray(entry) &&
+        (entry as { clientType?: unknown }).clientType === clientType,
+    ) as CcSwitchImportSettingsInput[CcSwitchClientType];
+
+  return normalizeCcSwitchImportSettings({
+    claude: findClient("claude") ?? undefined,
+    codex: findClient("codex") ?? undefined,
+    gemini: findClient("gemini") ?? undefined,
+  });
+}
+
 export function normalizeCcSwitchImportSettings(
   input?: CcSwitchImportSettingsInput | null,
 ): CcSwitchImportSettings {
@@ -99,7 +123,11 @@ export function readCcSwitchImportSettings(): CcSwitchImportSettings {
   try {
     if (typeof window === "undefined") return normalizeCcSwitchImportSettings();
     const raw = window.localStorage.getItem(CC_SWITCH_IMPORT_SETTINGS_STORAGE_KEY);
-    if (!raw) return normalizeCcSwitchImportSettings();
+    if (!raw) {
+      const configListRaw = window.localStorage.getItem(CC_SWITCH_IMPORT_CONFIG_LIST_STORAGE_KEY);
+      if (!configListRaw) return normalizeCcSwitchImportSettings();
+      return deriveSettingsFromConfigListPayload(JSON.parse(configListRaw));
+    }
     return normalizeCcSwitchImportSettings(JSON.parse(raw) as CcSwitchImportSettingsInput);
   } catch {
     return normalizeCcSwitchImportSettings();
