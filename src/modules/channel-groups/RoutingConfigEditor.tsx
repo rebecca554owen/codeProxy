@@ -1275,7 +1275,7 @@ export function RoutingConfigEditor({
                         ? "bg-rose-50/70 dark:bg-rose-500/10"
                         : ""
                     }
-                    allowWheelPropagationAtBoundary
+                    naturalFlow
                   />
                 </TabsContent>
 

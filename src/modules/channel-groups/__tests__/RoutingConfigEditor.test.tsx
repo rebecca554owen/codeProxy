@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { createEvent, fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import i18n from "@/i18n";
@@ -217,43 +217,7 @@ describe("RoutingConfigEditor", () => {
     expect(screen.getByRole("tablist")).toBeInTheDocument();
   });
 
-  test("lets the basic tab continue scrolling when the channel table reaches a wheel boundary", async () => {
-    await i18n.changeLanguage("zh-CN");
-    const user = userEvent.setup();
-
-    render(<Harness />);
-
-    await user.click(screen.getByRole("button", { name: "新增分组" }));
-    await user.click(screen.getByRole("combobox", { name: "选择渠道" }));
-    await user.click(screen.getByRole("option", { name: "Team A Claude" }));
-    await user.click(screen.getByRole("combobox", { name: "选择渠道" }));
-
-    const channelTable = screen.getByRole("table", { name: "选择渠道" });
-    const scrollContainer = channelTable.closest(".table-scrollbar") as HTMLDivElement | null;
-    expect(scrollContainer).not.toBeNull();
-
-    Object.defineProperties(scrollContainer!, {
-      clientHeight: { configurable: true, value: 248 },
-      scrollHeight: { configurable: true, value: 248 },
-      clientWidth: { configurable: true, value: 640 },
-      scrollWidth: { configurable: true, value: 640 },
-      scrollTop: { configurable: true, writable: true, value: 0 },
-      scrollLeft: { configurable: true, writable: true, value: 0 },
-    });
-
-    const event = createEvent.wheel(scrollContainer!, {
-      deltaY: 120,
-      bubbles: true,
-      cancelable: true,
-    });
-    const preventDefault = vi.spyOn(event, "preventDefault");
-
-    fireEvent(scrollContainer!, event);
-
-    expect(preventDefault).not.toHaveBeenCalled();
-  });
-
-  test("renders the basic tab channel table without a nested vertical scroll region", async () => {
+  test("renders the basic tab channel table without an internal table scroll container", async () => {
     await i18n.changeLanguage("zh-CN");
     const user = userEvent.setup();
 
@@ -266,13 +230,14 @@ describe("RoutingConfigEditor", () => {
     await user.click(screen.getByRole("combobox", { name: "选择渠道" }));
 
     const channelTable = screen.getByRole("table", { name: "选择渠道" });
-    const scrollContainer = channelTable.closest(".table-scrollbar") as HTMLDivElement | null;
-    const tableShell = scrollContainer?.parentElement as HTMLDivElement | null;
+    const tableShell = channelTable.closest("[data-vt-natural-flow]") as HTMLDivElement | null;
 
     expect(tableShell).not.toBeNull();
     expect(tableShell).toHaveClass("h-auto");
     expect(tableShell).toHaveClass("min-h-0");
     expect(tableShell).not.toHaveClass("h-[248px]");
+    expect(channelTable.closest(".table-scrollbar")).toBeNull();
+    expect(tableShell!.querySelector("[data-vt-scrollbar]")).toBeNull();
   });
 
   test("keeps the model list table visible while channel models are loading", async () => {
