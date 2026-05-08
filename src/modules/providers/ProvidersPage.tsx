@@ -638,7 +638,10 @@ export function ProvidersPage() {
   }, [importPreview, notify, refreshAll, saveImportedItems, startTransition, t]);
 
   return (
-    <div className="space-y-6">
+    <div
+      data-testid="providers-page-shell"
+      className="flex h-[calc(100dvh-112px)] min-h-0 flex-col gap-6 overflow-hidden"
+    >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="space-y-0.5">
           <h2 className="text-base font-semibold text-slate-900 dark:text-white">
@@ -648,7 +651,7 @@ export function ProvidersPage() {
             {t("providers.config_overview_desc")}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div data-testid="providers-top-actions" className="flex flex-wrap items-center gap-2">
           {currentImportKind ? (
             <>
               <input
@@ -663,10 +666,6 @@ export function ProvidersPage() {
                   event.currentTarget.value = "";
                 }}
               />
-              <Button variant="secondary" size="sm" onClick={handleExport} disabled={loading}>
-                <Download size={14} />
-                {t("providers.export_json")}
-              </Button>
               <Button
                 variant="secondary"
                 size="sm"
@@ -690,8 +689,21 @@ export function ProvidersPage() {
         </div>
       </div>
 
-      {currentImportKind && (currentTabItems.length > 0 || selectedExportCount > 0) ? (
-        <div className="flex flex-wrap items-center gap-1.5 rounded-2xl bg-slate-50/80 px-2 py-1.5 transition-colors duration-200 ease-out dark:bg-white/[0.03]">
+      {currentImportKind ? (
+        <div
+          data-testid="providers-batch-actions"
+          className="flex flex-wrap items-center gap-1.5 rounded-2xl bg-slate-50/80 px-2 py-1.5 transition-colors duration-200 ease-out dark:bg-white/[0.03]"
+        >
+          <Button
+            variant="secondary"
+            size="sm"
+            className="!h-8 px-2 text-xs"
+            onClick={handleExport}
+            disabled={currentTabItems.length === 0}
+          >
+            <Download size={14} />
+            {t("providers.export_json")}
+          </Button>
           <Button
             variant="secondary"
             size="sm"
@@ -735,45 +747,48 @@ export function ProvidersPage() {
           void refreshTab(nextTab);
         }}
       >
-        <TabsList>
-          <TabsTrigger value="gemini">
-            <img src={iconGemini} alt="" className="size-4" />
-            Gemini
-          </TabsTrigger>
-          <TabsTrigger value="claude">
-            <img src={iconClaude} alt="" className="size-4" />
-            Claude
-          </TabsTrigger>
-          <TabsTrigger value="codex">
-            <img src={iconCodex} alt="" className="size-4 dark:hidden" />
-            <img src={iconCodex} alt="" className="hidden size-4 dark:block" />
-            Codex
-          </TabsTrigger>
-          <TabsTrigger value="opencode-go">
-            <img src={iconOpenCodeLight} alt="" className="size-4 dark:hidden" />
-            <img src={iconOpenCodeDark} alt="" className="hidden size-4 dark:block" />
-            OpenCode Go
-          </TabsTrigger>
-          <TabsTrigger value="vertex">
-            <img src={iconVertex} alt="" className="size-4" />
-            Vertex
-          </TabsTrigger>
-          <TabsTrigger value="bedrock">
-            <Cloud size={16} />
-            Bedrock
-          </TabsTrigger>
-          <TabsTrigger value="openai">
-            <img src={iconOpenai} alt="" className="size-4 dark:hidden" />
-            <img src={iconOpenai} alt="" className="hidden size-4 dark:block" />
-            {t("providers.openai_compatible")}
-          </TabsTrigger>
-          <TabsTrigger value="ampcode">
-            <img src={iconAmp} alt="" className="size-4" />
-            Ampcode
-          </TabsTrigger>
-        </TabsList>
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
+          <div className="flex shrink-0">
+            <TabsList>
+              <TabsTrigger value="gemini">
+                <img src={iconGemini} alt="" className="size-4" />
+                Gemini
+              </TabsTrigger>
+              <TabsTrigger value="claude">
+                <img src={iconClaude} alt="" className="size-4" />
+                Claude
+              </TabsTrigger>
+              <TabsTrigger value="codex">
+                <img src={iconCodex} alt="" className="size-4 dark:hidden" />
+                <img src={iconCodex} alt="" className="hidden size-4 dark:block" />
+                Codex
+              </TabsTrigger>
+              <TabsTrigger value="opencode-go">
+                <img src={iconOpenCodeLight} alt="" className="size-4 dark:hidden" />
+                <img src={iconOpenCodeDark} alt="" className="hidden size-4 dark:block" />
+                OpenCode Go
+              </TabsTrigger>
+              <TabsTrigger value="vertex">
+                <img src={iconVertex} alt="" className="size-4" />
+                Vertex
+              </TabsTrigger>
+              <TabsTrigger value="bedrock">
+                <Cloud size={16} />
+                Bedrock
+              </TabsTrigger>
+              <TabsTrigger value="openai">
+                <img src={iconOpenai} alt="" className="size-4 dark:hidden" />
+                <img src={iconOpenai} alt="" className="hidden size-4 dark:block" />
+                {t("providers.openai_compatible")}
+              </TabsTrigger>
+              <TabsTrigger value="ampcode">
+                <img src={iconAmp} alt="" className="size-4" />
+                Ampcode
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
-        <TabsContent value="gemini" className="mt-6">
+        <TabsContent value="gemini" className="min-h-0 flex-1">
           <ProviderKeyListCard
             icon={Globe}
             title={t("providers.gemini_keys")}
@@ -793,7 +808,7 @@ export function ProvidersPage() {
           />
         </TabsContent>
 
-        <TabsContent value="claude" className="mt-6">
+        <TabsContent value="claude" className="min-h-0 flex-1">
           <ProviderKeyListCard
             icon={Bot}
             title={t("providers.claude_keys")}
@@ -813,7 +828,7 @@ export function ProvidersPage() {
           />
         </TabsContent>
 
-        <TabsContent value="codex" className="mt-6">
+        <TabsContent value="codex" className="min-h-0 flex-1">
           <ProviderKeyListCard
             icon={FileKey}
             title={t("providers.codex_keys")}
@@ -833,7 +848,7 @@ export function ProvidersPage() {
           />
         </TabsContent>
 
-        <TabsContent value="opencode-go" className="mt-6">
+        <TabsContent value="opencode-go" className="min-h-0 flex-1">
           <ProviderKeyListCard
             icon={FileKey}
             iconSrc={iconOpenCodeLight}
@@ -856,7 +871,7 @@ export function ProvidersPage() {
           />
         </TabsContent>
 
-        <TabsContent value="vertex" className="mt-6">
+        <TabsContent value="vertex" className="min-h-0 flex-1">
           <ProviderKeyListCard
             icon={Database}
             title={t("providers.vertex_keys")}
@@ -875,7 +890,7 @@ export function ProvidersPage() {
           />
         </TabsContent>
 
-        <TabsContent value="bedrock" className="mt-6">
+        <TabsContent value="bedrock" className="min-h-0 flex-1">
           <ProviderKeyListCard
             icon={Cloud}
             title={t("providers.bedrock_keys")}
@@ -895,7 +910,7 @@ export function ProvidersPage() {
           />
         </TabsContent>
 
-        <TabsContent value="openai" className="mt-6">
+        <TabsContent value="openai" className="min-h-0 flex-1">
           <OpenAIProvidersTab
             providers={openaiProviders}
             openOpenAIEditor={openOpenAIEditor}
@@ -909,7 +924,7 @@ export function ProvidersPage() {
           />
         </TabsContent>
 
-        <TabsContent value="ampcode" className="mt-6">
+        <TabsContent value="ampcode" className="min-h-0 flex-1">
           <AmpcodePanel
             loading={loading}
             isPending={isPending}
@@ -925,6 +940,7 @@ export function ProvidersPage() {
             setAmpMappings={setAmpMappings}
           />
         </TabsContent>
+        </div>
       </Tabs>
 
       <ProviderKeyModal

@@ -43,6 +43,8 @@ export function OpenAIProvidersTab({
     <Card
       title={t("providers.openai_compatible")}
       description={t("providers.claude_desc")}
+      className="flex h-full min-h-0 flex-col"
+      bodyClassName="min-h-0 flex-1"
       actions={
         <Button variant="primary" size="sm" onClick={() => openOpenAIEditor(null)}>
           <Plus size={14} />
@@ -56,7 +58,7 @@ export function OpenAIProvidersTab({
           description={t("providers.no_openai_desc")}
         />
       ) : (
-        <div className="space-y-3">
+        <div data-testid="providers-tab-scroll" className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
           {providers.map((provider, idx) => {
             const selectionKey = provider.name.trim().toLowerCase();
             const selected = selectedKeys?.has(selectionKey) ?? false;

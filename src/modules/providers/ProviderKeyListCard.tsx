@@ -76,6 +76,8 @@ export function ProviderKeyListCard({
     <Card
       title={title}
       description={description}
+      className="flex h-full min-h-0 flex-col"
+      bodyClassName="min-h-0 flex-1"
       actions={
         <Button variant="primary" size="sm" onClick={onAdd}>
           <Plus size={14} />
@@ -86,7 +88,7 @@ export function ProviderKeyListCard({
       {items.length === 0 ? (
         <EmptyState title={t("providers.no_config")} description={t("providers.no_config_desc")} />
       ) : (
-        <div className="space-y-3">
+        <div data-testid="providers-tab-scroll" className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
           {items.map((item, idx) => {
             const selectionKey = item.apiKey.trim().toLowerCase();
             const selected = selectedKeys?.has(selectionKey) ?? false;

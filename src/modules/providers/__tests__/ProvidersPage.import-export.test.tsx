@@ -127,6 +127,55 @@ describe("ProvidersPage import/export", () => {
     expect(clickSpy).toHaveBeenCalled();
   });
 
+  test("keeps import and refresh in the top toolbar while moving export into the batch actions", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter initialEntries={["/ai-providers"]}>
+        <ThemeProvider>
+          <ToastProvider>
+            <Routes>
+              <Route path="/ai-providers/*" element={<ProvidersPage />} />
+            </Routes>
+          </ToastProvider>
+        </ThemeProvider>
+      </MemoryRouter>,
+    );
+
+    await user.click(await screen.findByRole("tab", { name: /Codex/ }));
+    expect(await screen.findByText("Codex Main")).toBeInTheDocument();
+
+    const topActions = screen.getByTestId("providers-top-actions");
+    expect(within(topActions).queryByRole("button", { name: /Export JSON/i })).not.toBeInTheDocument();
+    expect(within(topActions).getByRole("button", { name: /Import JSON/i })).toBeInTheDocument();
+    expect(within(topActions).getByRole("button", { name: /Refresh/i })).toBeInTheDocument();
+
+    const batchActions = screen.getByTestId("providers-batch-actions");
+    expect(within(batchActions).getByRole("button", { name: /^Export JSON$/i })).toBeInTheDocument();
+  });
+
+  test("locks the page shell height and uses a dedicated scroll area for the active tab content", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter initialEntries={["/ai-providers"]}>
+        <ThemeProvider>
+          <ToastProvider>
+            <Routes>
+              <Route path="/ai-providers/*" element={<ProvidersPage />} />
+            </Routes>
+          </ToastProvider>
+        </ThemeProvider>
+      </MemoryRouter>,
+    );
+
+    await user.click(await screen.findByRole("tab", { name: /Codex/ }));
+    expect(await screen.findByText("Codex Main")).toBeInTheDocument();
+
+    expect(screen.getByTestId("providers-page-shell")).toHaveClass("h-[calc(100dvh-112px)]");
+    expect(screen.getByTestId("providers-tab-scroll")).toHaveClass("overflow-y-auto");
+  });
+
   test("exports only the selected provider cards as JSON", async () => {
     const user = userEvent.setup();
 
