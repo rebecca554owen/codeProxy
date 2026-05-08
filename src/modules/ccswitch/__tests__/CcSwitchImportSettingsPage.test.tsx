@@ -9,6 +9,7 @@ import type { CcSwitchImportConfigListItem } from "@/modules/ccswitch/ccswitchIm
 
 const listChannelGroups = vi.fn();
 const listAvailableModels = vi.fn();
+const getModelConfigs = vi.fn();
 const listConfigs = vi.fn();
 const replaceConfigs = vi.fn();
 const loadConfiguredModelAvailability = vi.fn();
@@ -33,6 +34,7 @@ vi.mock("@/lib/http/apis/models", () => ({
       allowedChannelGroups?: string[];
       allowedChannels?: string[];
     }) => listAvailableModels(params),
+    getModelConfigs: (scope: "active" | "library") => getModelConfigs(scope),
   },
 }));
 
@@ -60,6 +62,7 @@ describe("CcSwitchImportSettingsPage", () => {
     window.localStorage.clear();
     listChannelGroups.mockReset();
     listAvailableModels.mockReset();
+    getModelConfigs.mockReset();
     listConfigs.mockReset();
     replaceConfigs.mockReset();
     loadConfiguredModelAvailability.mockReset();
@@ -86,6 +89,7 @@ describe("CcSwitchImportSettingsPage", () => {
       { id: "deepseek-v4-flash" },
       { id: "kimi-k2" },
     ]);
+    getModelConfigs.mockResolvedValue([]);
     listConfigs.mockResolvedValue([]);
     replaceConfigs.mockResolvedValue(undefined);
   });
@@ -250,6 +254,16 @@ describe("CcSwitchImportSettingsPage", () => {
         name: "chatgpt-pro",
         description: "ChatGPT Pro route",
         channels: ["A_GptPro"],
+        channelDetails: [
+          {
+            name: "A_GptPro",
+            source: "codex",
+            default_tags: ["codex", "pro"],
+            custom_tags: ["20x"],
+            hidden_default_tags: [],
+            display_tags: ["codex", "pro", "20x"],
+          },
+        ],
         "path-routes": ["/openai/pro"],
       },
     ]);
@@ -266,8 +280,24 @@ describe("CcSwitchImportSettingsPage", () => {
     loadConfiguredModelAvailability.mockResolvedValue({
       scoped: true,
       items: [],
-      idSet: new Set(["codex-auto-review", "gpt-5", "gpt-5.3-codex", "gpt-5.5"]),
+      idSet: new Set([
+        "codex-auto-review",
+        "gpt-5",
+        "gpt-5-codex",
+        "gpt-5.1",
+        "gpt-5.1-codex",
+        "gpt-5.3-codex",
+        "gpt-5.5",
+        "gpt-image-2",
+      ]),
     });
+    getModelConfigs.mockResolvedValue([
+      { id: "gpt-5", owned_by: "openai" },
+      { id: "gpt-5-codex", owned_by: "openai" },
+      { id: "gpt-5.3-codex", owned_by: "codex" },
+      { id: "gpt-5.5", owned_by: "codex" },
+      { id: "gpt-image-2", owned_by: "openai" },
+    ]);
     renderPage();
     const user = userEvent.setup();
 
@@ -277,14 +307,17 @@ describe("CcSwitchImportSettingsPage", () => {
     await user.click(within(dialog).getByRole("combobox", { name: /select channel group/i }));
     await user.click(await screen.findByRole("option", { name: /chatgpt-pro.*\/openai\/pro/i }));
 
-    expect(await within(dialog).findByLabelText(/cc switch request model for gpt-5\.5/i)).toBeInTheDocument();
     expect(
-      within(dialog).queryByLabelText(/cc switch request model for gpt-5\.1-codex/i),
+      await within(dialog).findByLabelText(/cc switch request model for gpt-5\.5/i),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).queryByLabelText(/cc switch request model for gpt-5-codex/i),
     ).not.toBeInTheDocument();
     expect(listAvailableModels).toHaveBeenCalledWith({
       allowedChannels: ["A_GptPro"],
     });
     expect(loadConfiguredModelAvailability).toHaveBeenCalledTimes(1);
+    expect(getModelConfigs).toHaveBeenCalledWith("active");
   });
 
   test("previews the full BaseURL request address from the selected channel group path", async () => {

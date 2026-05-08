@@ -38,6 +38,7 @@ export interface CcSwitchChannelGroupOption {
   routePath?: string;
   allowedModels?: string[];
   channels?: string[];
+  modelOwnerKeys?: string[];
 }
 
 const iconByType: Record<CcSwitchClientType, string> = {
@@ -98,6 +99,12 @@ function dedupeModels(models: readonly string[]): string[] {
   });
   return result.sort((a, b) => a.localeCompare(b));
 }
+
+const normalizeModelOwnerKey = (value: unknown): string =>
+  String(value ?? "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .toLowerCase();
 
 function pickClaudeRoleModel(role: CcSwitchClaudeModelRole, models: readonly string[]): string {
   const normalized = dedupeModels(models);
@@ -268,6 +275,9 @@ export function CcSwitchImportConfigModal({
     }
 
     const lookupChannels = dedupeModels(selectedGroupOption?.channels ?? []);
+    const modelOwnerKeys = new Set(
+      (selectedGroupOption?.modelOwnerKeys ?? []).map(normalizeModelOwnerKey).filter(Boolean),
+    );
     const lookupParams =
       lookupChannels.length > 0
         ? { allowedChannels: lookupChannels }
@@ -280,7 +290,25 @@ export function CcSwitchImportConfigModal({
         if (cancelled) return;
         const availability = await loadConfiguredModelAvailability();
         if (cancelled) return;
-        const visibleModels = filterByConfiguredModelAvailability(models, availability);
+        let visibleModels = filterByConfiguredModelAvailability(models, availability);
+        if (modelOwnerKeys.size > 0) {
+          const modelConfigs = await modelsApi.getModelConfigs("active").catch(() => []);
+          if (cancelled) return;
+          const allowedModelIds = new Set(
+            modelConfigs
+              .filter(
+                (model) =>
+                  modelOwnerKeys.has(normalizeModelOwnerKey(model.owned_by)) ||
+                  modelOwnerKeys.has(normalizeModelOwnerKey(model.source)),
+              )
+              .map((model) => model.id.toLowerCase()),
+          );
+          if (allowedModelIds.size > 0) {
+            visibleModels = visibleModels.filter((model) =>
+              allowedModelIds.has(model.id.toLowerCase()),
+            );
+          }
+        }
         const modelIds = visibleModels.map((model) => model.id);
         setAvailableModels(dedupeModels(modelIds));
       })

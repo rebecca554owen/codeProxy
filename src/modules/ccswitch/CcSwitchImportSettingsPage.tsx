@@ -5,7 +5,10 @@ import iconClaude from "@/assets/icons/claude.svg";
 import iconCodex from "@/assets/icons/codex.svg";
 import iconGemini from "@/assets/icons/gemini.svg";
 import { detectApiBaseFromLocation } from "@/lib/connection";
-import { channelGroupsApi } from "@/lib/http/apis/channel-groups";
+import {
+  channelGroupsApi,
+  type ChannelGroupChannelDetail,
+} from "@/lib/http/apis/channel-groups";
 import { useOptionalAuth } from "@/modules/auth/AuthProvider";
 import { ccSwitchImportConfigsApi } from "@/lib/http/apis/ccswitch-import-configs";
 import { Button } from "@/modules/ui/Button";
@@ -39,6 +42,28 @@ function createDraft(clientType: CcSwitchClientType = "codex") {
     providerName: "",
   };
 }
+
+const normalizeModelOwnerKey = (value: string): string =>
+  value.trim().replace(/\s+/g, "-").toLowerCase();
+
+const getChannelGroupModelOwnerKeys = (
+  details: readonly ChannelGroupChannelDetail[] | undefined,
+): string[] => {
+  const keys = new Set<string>();
+  for (const detail of details ?? []) {
+    const values = [
+      detail.source,
+      ...(detail.default_tags ?? []),
+      ...(detail.custom_tags ?? []),
+      ...(detail.display_tags ?? []),
+    ];
+    for (const value of values) {
+      const key = normalizeModelOwnerKey(String(value ?? ""));
+      if (key) keys.add(key);
+    }
+  }
+  return Array.from(keys);
+};
 
 export function CcSwitchImportSettingsPage() {
   const { t } = useTranslation();
@@ -75,6 +100,7 @@ export function CcSwitchImportSettingsPage() {
               routePath: Array.isArray(item["path-routes"]) ? item["path-routes"][0] : "",
               allowedModels: Array.isArray(item["allowed-models"]) ? item["allowed-models"] : [],
               channels: Array.isArray(item.channels) ? item.channels : [],
+              modelOwnerKeys: getChannelGroupModelOwnerKeys(item.channelDetails),
             }))
             .filter((item) => item.value)
             .sort((left, right) => left.label.localeCompare(right.label)),
