@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Bot, Cloud, Database, FileKey, Globe, RefreshCw } from "lucide-react";
+import { Bot, Cloud, Database, Download, FileKey, Globe, RefreshCw, Upload } from "lucide-react";
 import iconGemini from "@/assets/icons/gemini.svg";
 import iconClaude from "@/assets/icons/claude.svg";
 import iconCodex from "@/assets/icons/codex.svg";
@@ -17,8 +17,10 @@ import { proxiesApi, type ProxyPoolEntry } from "@/lib/http/apis/proxies";
 import type { BedrockProviderConfig, OpenAIProvider, ProviderSimpleConfig } from "@/lib/http/types";
 import { Button } from "@/modules/ui/Button";
 import { ConfirmModal } from "@/modules/ui/ConfirmModal";
+import { Modal } from "@/modules/ui/Modal";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/modules/ui/Tabs";
 import { useToast } from "@/modules/ui/ToastProvider";
+import { downloadTextAsFile } from "@/modules/auth-files/helpers/authFilesPageUtils";
 import { AmpcodePanel } from "@/modules/providers/components/AmpcodePanel";
 import { OpenAIProviderModal } from "@/modules/providers/components/OpenAIProviderModal";
 import { OpenAIProvidersTab } from "@/modules/providers/components/OpenAIProvidersTab";
@@ -35,6 +37,12 @@ import {
   readString,
   type AmpMappingEntry,
 } from "@/modules/providers/providers-helpers";
+import {
+  createProviderExportText,
+  prepareProviderImport,
+  type ProviderImportDiff,
+  type ProviderImportKind,
+} from "@/modules/providers/provider-import-export";
 import { summarizeProviderAccess } from "@/modules/providers/provider-access";
 
 export function ProvidersPage() {
@@ -79,6 +87,14 @@ export function ProvidersPage() {
     | { type: "deleteOpenAI"; index: number }
   >(null);
   const handledRouteRef = useRef("");
+  const importInputRef = useRef<HTMLInputElement | null>(null);
+  const [importPreview, setImportPreview] = useState<{
+    kind: ProviderImportKind;
+    nextItems: ProviderSimpleConfig[] | BedrockProviderConfig[] | OpenAIProvider[];
+    diff: ProviderImportDiff;
+    filename: string;
+  } | null>(null);
+  const [importing, setImporting] = useState(false);
 
   const refreshTab = useCallback(
     async (tabId: typeof tab) => {
@@ -404,6 +420,133 @@ export function ProvidersPage() {
     [notify],
   );
 
+  const getImportKind = useCallback((): ProviderImportKind | null => {
+    if (tab === "ampcode") return null;
+    return tab;
+  }, [tab]);
+
+  const getCurrentItems = useCallback(
+    (kind: ProviderImportKind) => {
+      switch (kind) {
+        case "gemini":
+          return geminiKeys;
+        case "claude":
+          return claudeKeys;
+        case "codex":
+          return codexKeys;
+        case "opencode-go":
+          return openCodeGoKeys;
+        case "vertex":
+          return vertexKeys;
+        case "bedrock":
+          return bedrockKeys;
+        case "openai":
+          return openaiProviders;
+      }
+    },
+    [
+      bedrockKeys,
+      claudeKeys,
+      codexKeys,
+      geminiKeys,
+      openCodeGoKeys,
+      openaiProviders,
+      vertexKeys,
+    ],
+  );
+
+  const saveImportedItems = useCallback(
+    async (
+      kind: ProviderImportKind,
+      items: ProviderSimpleConfig[] | BedrockProviderConfig[] | OpenAIProvider[],
+    ) => {
+      switch (kind) {
+        case "gemini":
+          await providersApi.saveGeminiKeys(items as ProviderSimpleConfig[]);
+          return;
+        case "claude":
+          await providersApi.saveClaudeConfigs(items as ProviderSimpleConfig[]);
+          return;
+        case "codex":
+          await providersApi.saveCodexConfigs(items as ProviderSimpleConfig[]);
+          return;
+        case "opencode-go":
+          await providersApi.saveOpenCodeGoConfigs(items as ProviderSimpleConfig[]);
+          return;
+        case "vertex":
+          await providersApi.saveVertexConfigs(items as ProviderSimpleConfig[]);
+          return;
+        case "bedrock":
+          await providersApi.saveBedrockConfigs(items as BedrockProviderConfig[]);
+          return;
+        case "openai":
+          await providersApi.saveOpenAIProviders(items as OpenAIProvider[]);
+          return;
+      }
+    },
+    [],
+  );
+
+  const handleExport = useCallback(() => {
+    const kind = getImportKind();
+    if (!kind) return;
+    downloadTextAsFile(
+      createProviderExportText(kind, getCurrentItems(kind) as never),
+      `${kind}-providers.json`,
+    );
+  }, [getCurrentItems, getImportKind]);
+
+  const handleImportFile = useCallback(
+    async (file: File | null) => {
+      const kind = getImportKind();
+      if (!kind || !file) return;
+      if (!file.name.toLowerCase().endsWith(".json") && file.type !== "application/json") {
+        notify({ type: "error", message: t("upload_error_json") });
+        return;
+      }
+
+      try {
+        const preview = prepareProviderImport(kind, await file.text(), getCurrentItems(kind) as never);
+        setImportPreview({
+          kind,
+          nextItems: preview.nextItems,
+          diff: preview.diff,
+          filename: file.name,
+        });
+      } catch (error: unknown) {
+        notify({
+          type: "error",
+          message:
+            error instanceof Error && error.message === "provider_mismatch"
+              ? t("providers.import_provider_mismatch")
+              : t("providers.import_invalid"),
+        });
+      }
+    },
+    [getCurrentItems, getImportKind, notify, t],
+  );
+
+  const confirmImport = useCallback(async () => {
+    if (!importPreview || !importPreview.diff.hasChanges) return;
+    setImporting(true);
+    try {
+      await saveImportedItems(importPreview.kind, importPreview.nextItems);
+      notify({
+        type: "success",
+        message: t("providers.import_success", { filename: importPreview.filename }),
+      });
+      setImportPreview(null);
+      startTransition(() => void refreshAll());
+    } catch (error: unknown) {
+      notify({
+        type: "error",
+        message: error instanceof Error ? error.message : t("providers.save_failed"),
+      });
+    } finally {
+      setImporting(false);
+    }
+  }, [importPreview, notify, refreshAll, saveImportedItems, startTransition, t]);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -415,15 +558,46 @@ export function ProvidersPage() {
             {t("providers.config_overview_desc")}
           </p>
         </div>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => void refreshTab(tab)}
-          disabled={loading}
-        >
-          <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-          {t("providers.refresh")}
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {getImportKind() ? (
+            <>
+              <input
+                ref={importInputRef}
+                type="file"
+                accept="application/json,.json"
+                aria-label={t("providers.import_json")}
+                className="sr-only"
+                onChange={(event) => {
+                  const file = event.currentTarget.files?.[0] ?? null;
+                  void handleImportFile(file);
+                  event.currentTarget.value = "";
+                }}
+              />
+              <Button variant="secondary" size="sm" onClick={handleExport} disabled={loading}>
+                <Download size={14} />
+                {t("providers.export_json")}
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => importInputRef.current?.click()}
+                disabled={loading}
+              >
+                <Upload size={14} />
+                {t("providers.import_json")}
+              </Button>
+            </>
+          ) : null}
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => void refreshTab(tab)}
+            disabled={loading}
+          >
+            <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+            {t("providers.refresh")}
+          </Button>
+        </div>
       </div>
 
       <Tabs
@@ -676,6 +850,112 @@ export function ProvidersPage() {
           void deleteKey(action.keyType, action.index);
         }}
       />
+
+      <Modal
+        open={importPreview !== null}
+        title={t("providers.import_preview_title")}
+        description={
+          importPreview
+            ? t("providers.import_preview_desc", { filename: importPreview.filename })
+            : undefined
+        }
+        maxWidth="max-w-2xl"
+        onClose={() => {
+          if (importing) return;
+          setImportPreview(null);
+        }}
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => setImportPreview(null)}
+              disabled={importing}
+            >
+              {t("common.cancel")}
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => void confirmImport()}
+              disabled={!importPreview?.diff.hasChanges || importing}
+            >
+              {t("providers.confirm_import")}
+            </Button>
+          </>
+        }
+      >
+        {importPreview ? (
+          <div className="space-y-4 text-sm text-slate-700 dark:text-white/75">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-neutral-800 dark:bg-neutral-900">
+                <div>{t("providers.diff_added", { count: importPreview.diff.added })}</div>
+                <div>{t("providers.diff_updated", { count: importPreview.diff.changed })}</div>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-neutral-800 dark:bg-neutral-900">
+                <div>{t("providers.diff_removed", { count: importPreview.diff.removed })}</div>
+                <div>
+                  {t("providers.diff_duplicates_cleaned", {
+                    count: importPreview.diff.duplicateEntriesRemoved,
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {!importPreview.diff.hasChanges ? (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">
+                {t("providers.import_no_changes")}
+              </div>
+            ) : null}
+
+            {importPreview.diff.addedLabels.length ? (
+              <div>
+                <p className="font-semibold">{t("providers.diff_added_label")}</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {importPreview.diff.addedLabels.map((label) => (
+                    <span
+                      key={`added-${label}`}
+                      className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-100"
+                    >
+                      {label}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {importPreview.diff.changedLabels.length ? (
+              <div>
+                <p className="font-semibold">{t("providers.diff_updated_label")}</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {importPreview.diff.changedLabels.map((label) => (
+                    <span
+                      key={`changed-${label}`}
+                      className="rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-xs text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-100"
+                    >
+                      {label}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {importPreview.diff.removedLabels.length ? (
+              <div>
+                <p className="font-semibold">{t("providers.diff_removed_label")}</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {importPreview.diff.removedLabels.map((label) => (
+                    <span
+                      key={`removed-${label}`}
+                      className="rounded-full border border-rose-200 bg-rose-50 px-2 py-1 text-xs text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-100"
+                    >
+                      {label}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </Modal>
     </div>
   );
 }
