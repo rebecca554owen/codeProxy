@@ -8,6 +8,7 @@ import { ToastProvider } from "@/modules/ui/ToastProvider";
 import type { CcSwitchImportConfigListItem } from "@/modules/ccswitch/ccswitchImportConfigList";
 
 const listChannelGroups = vi.fn();
+const listAvailableModels = vi.fn();
 const listConfigs = vi.fn();
 const replaceConfigs = vi.fn();
 
@@ -21,6 +22,13 @@ vi.mock("@/lib/http/apis/ccswitch-import-configs", () => ({
   ccSwitchImportConfigsApi: {
     list: () => listConfigs(),
     replace: (configs: CcSwitchImportConfigListItem[]) => replaceConfigs(configs),
+  },
+}));
+
+vi.mock("@/lib/http/apis/models", () => ({
+  modelsApi: {
+    listAvailableModels: (params: { allowedChannelGroups?: string[] }) =>
+      listAvailableModels(params),
   },
 }));
 
@@ -39,11 +47,16 @@ describe("CcSwitchImportSettingsPage", () => {
     await i18n.changeLanguage("en");
     window.localStorage.clear();
     listChannelGroups.mockReset();
+    listAvailableModels.mockReset();
     listConfigs.mockReset();
     replaceConfigs.mockReset();
     listChannelGroups.mockResolvedValue([
-      { name: "team-a", description: "Team A route" },
-      { name: "team-b", description: "Team B route" },
+      { name: "pro", description: "Pro route", "path-routes": ["/pro"] },
+      { name: "team-a", description: "Team A route", "path-routes": ["/team-a"] },
+    ]);
+    listAvailableModels.mockResolvedValue([
+      { id: "deepseek-v4-flash" },
+      { id: "kimi-k2" },
     ]);
     listConfigs.mockResolvedValue([]);
     replaceConfigs.mockResolvedValue(undefined);
@@ -79,38 +92,72 @@ describe("CcSwitchImportSettingsPage", () => {
     expect(listConfigs).toHaveBeenCalledTimes(1);
   });
 
-  test("creates a new Claude Code config row and persists it through the API", async () => {
+  test("creates a Codex config from a single channel group and model mapping table", async () => {
+    listChannelGroups.mockResolvedValue([
+      {
+        name: "pro",
+        description: "Pro route",
+        "path-routes": ["/pro"],
+        "allowed-models": ["deepseek-v4-flash", "kimi-k2"],
+      },
+      { name: "team-a", description: "Team A route", "path-routes": ["/team-a"] },
+    ]);
+    listAvailableModels.mockResolvedValue([
+      { id: "deepseek-v4-flash" },
+      { id: "gpt-4o-mini" },
+      { id: "kimi-k2" },
+    ]);
     renderPage();
     const user = userEvent.setup();
 
     await user.click(screen.getByRole("button", { name: /new config/i }));
 
     const dialog = await screen.findByRole("dialog", { name: /new cc switch config/i });
-    await user.click(within(dialog).getByRole("tab", { name: /claude code/i }));
-    await user.type(within(dialog).getByLabelText(/provider name/i), "Relay Claude");
-    await user.type(within(dialog).getByLabelText(/remark/i), "Team preset");
+    const origin = window.location.origin;
 
-    await user.click(within(dialog).getByRole("combobox", { name: /default model/i }));
-    await user.click(await screen.findByRole("option", { name: "claude-sonnet-4-5" }));
+    expect(within(dialog).queryByLabelText(/codex endpoint path/i)).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("combobox", { name: /default model/i })).not.toBeInTheDocument();
+    expect(within(dialog).queryByText(/for codex cli/i)).not.toBeInTheDocument();
+    expect(within(dialog).getByText(/select a channel group to load available models/i)).toBeInTheDocument();
+    expect(within(dialog).queryByDisplayValue("gpt-5.5")).not.toBeInTheDocument();
 
-    await user.click(within(dialog).getByRole("combobox", { name: /allowed channel groups/i }));
-    await user.type(screen.getByPlaceholderText(/search channel groups/i), "team");
-    await user.click(screen.getByRole("option", { name: /team-a/i }));
+    await user.click(within(dialog).getByRole("combobox", { name: /select channel group/i }));
+    await user.click(await screen.findByRole("option", { name: /pro.*\/pro/i }));
 
-    await user.click(within(dialog).getByRole("combobox", { name: /claude code auth field/i }));
-    await user.click(await screen.findByRole("option", { name: "ANTHROPIC_AUTH_TOKEN" }));
+    expect(within(dialog).getByTestId("ccswitch-config-endpoint-preview")).toHaveTextContent(
+      `${origin}/pro/v1`,
+    );
+
+    await waitFor(() => expect(listAvailableModels).toHaveBeenCalledWith({ allowedChannelGroups: ["pro"] }));
+    const requestModelInput = await within(dialog).findByLabelText(
+      /cc switch request model for deepseek-v4-flash/i,
+    );
+    expect(
+      within(dialog).queryByLabelText(/cc switch request model for gpt-4o-mini/i),
+    ).not.toBeInTheDocument();
+    await user.clear(requestModelInput);
+    await user.type(requestModelInput, "gpt-5.5");
+
+    await user.type(within(dialog).getByLabelText(/provider name/i), "Relay Codex");
+    await user.type(within(dialog).getByLabelText(/remark/i), "Pro preset");
 
     await user.click(within(dialog).getByRole("button", { name: /^save$/i }));
 
     await waitFor(() =>
       expect(replaceConfigs).toHaveBeenCalledWith([
         expect.objectContaining({
-          clientType: "claude",
-          providerName: "Relay Claude",
-          note: "Team preset",
-          defaultModel: "claude-sonnet-4-5",
-          allowedChannelGroups: ["team-a"],
-          apiKeyField: "ANTHROPIC_AUTH_TOKEN",
+          clientType: "codex",
+          providerName: "Relay Codex",
+          note: "Pro preset",
+          defaultModel: "gpt-5.5",
+          allowedChannelGroups: ["pro"],
+          endpointPath: "/v1",
+          modelMappings: expect.arrayContaining([
+            {
+              requestModel: "gpt-5.5",
+              targetModel: "deepseek-v4-flash",
+            },
+          ]),
         }),
       ]),
     );
@@ -118,7 +165,7 @@ describe("CcSwitchImportSettingsPage", () => {
     expect(screen.getByText(/1 saved preset/i)).toBeInTheDocument();
   });
 
-  test("previews the full BaseURL request address while editing endpoint path", async () => {
+  test("previews the full BaseURL request address from the selected channel group path", async () => {
     renderPage();
     const user = userEvent.setup();
 
@@ -130,11 +177,71 @@ describe("CcSwitchImportSettingsPage", () => {
 
     expect(endpointPreview).toHaveTextContent(`${origin}/v1`);
 
-    const endpointInput = within(dialog).getByLabelText(/codex endpoint path/i);
-    await user.clear(endpointInput);
-    await user.type(endpointInput, "/openai/v1");
+    await user.click(within(dialog).getByRole("combobox", { name: /select channel group/i }));
+    await user.click(await screen.findByRole("option", { name: /team-a.*\/team-a/i }));
 
-    expect(endpointPreview).toHaveTextContent(`${origin}/openai/v1`);
+    expect(endpointPreview).toHaveTextContent(`${origin}/team-a/v1`);
+  });
+
+  test("creates a Claude Code config with main and family default models", async () => {
+    listAvailableModels.mockResolvedValue([
+      { id: "claude-haiku-4-5" },
+      { id: "claude-sonnet-4-5" },
+      { id: "claude-opus-4-1" },
+    ]);
+    renderPage();
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole("button", { name: /new config/i }));
+
+    const dialog = await screen.findByRole("dialog", { name: /new cc switch config/i });
+    await user.click(within(dialog).getByRole("tab", { name: /claude code/i }));
+    await user.click(within(dialog).getByRole("combobox", { name: /select channel group/i }));
+    await user.click(await screen.findByRole("option", { name: /pro.*\/pro/i }));
+
+    expect(await within(dialog).findByText(/main model/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/haiku default model/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/sonnet default model/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/opus default model/i)).toBeInTheDocument();
+
+    await user.type(within(dialog).getByLabelText(/provider name/i), "Relay Claude");
+    await user.click(within(dialog).getByRole("combobox", { name: /claude code auth field/i }));
+    await user.click(await screen.findByRole("option", { name: "ANTHROPIC_AUTH_TOKEN" }));
+    await user.click(within(dialog).getByRole("button", { name: /^save$/i }));
+
+    await waitFor(() =>
+      expect(replaceConfigs).toHaveBeenCalledWith([
+        expect.objectContaining({
+          clientType: "claude",
+          providerName: "Relay Claude",
+          defaultModel: "claude-sonnet-4-5",
+          allowedChannelGroups: ["pro"],
+          apiKeyField: "ANTHROPIC_AUTH_TOKEN",
+          modelMappings: expect.arrayContaining([
+            {
+              role: "main",
+              requestModel: "main",
+              targetModel: "claude-sonnet-4-5",
+            },
+            {
+              role: "haiku",
+              requestModel: "haiku",
+              targetModel: "claude-haiku-4-5",
+            },
+            {
+              role: "sonnet",
+              requestModel: "sonnet",
+              targetModel: "claude-sonnet-4-5",
+            },
+            {
+              role: "opus",
+              requestModel: "opus",
+              targetModel: "claude-opus-4-1",
+            },
+          ]),
+        }),
+      ]),
+    );
   });
 
   test("deletes a saved config row through the API", async () => {

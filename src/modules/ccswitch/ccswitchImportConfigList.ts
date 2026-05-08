@@ -10,12 +10,21 @@ import {
   type CcSwitchClaudeAuthField,
 } from "@/modules/ccswitch/ccswitchImportSettings";
 
+export type CcSwitchClaudeModelRole = "main" | "haiku" | "sonnet" | "opus";
+
+export interface CcSwitchModelMapping {
+  requestModel: string;
+  targetModel: string;
+  role?: CcSwitchClaudeModelRole;
+}
+
 export interface CcSwitchImportConfigListItem {
   id: string;
   clientType: CcSwitchClientType;
   providerName: string;
   note: string;
   defaultModel: string;
+  modelMappings: CcSwitchModelMapping[];
   allowedChannelGroups: string[];
   endpointPath: string;
   usageAutoInterval: number;
@@ -42,6 +51,54 @@ const normalizeChannelGroups = (value: unknown): string[] => {
   });
 
   return items;
+};
+
+const normalizeClaudeRole = (value: unknown): CcSwitchClaudeModelRole | undefined => {
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase();
+  return normalized === "main" ||
+    normalized === "haiku" ||
+    normalized === "sonnet" ||
+    normalized === "opus"
+    ? normalized
+    : undefined;
+};
+
+const normalizeModelMappings = (value: unknown): CcSwitchModelMapping[] => {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const mappings: CcSwitchModelMapping[] = [];
+
+  value.forEach((entry) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return;
+    const record = entry as Record<string, unknown>;
+    const role = normalizeClaudeRole(record.role);
+    const targetModel = String(
+      record["target-model"] ?? record.targetModel ?? record.target ?? record.name ?? "",
+    ).trim();
+    const requestModel = String(
+      record["request-model"] ??
+        record.requestModel ??
+        record.request ??
+        record.alias ??
+        record.from ??
+        (role ? role : targetModel),
+    ).trim();
+    if (!targetModel || (!role && !requestModel)) return;
+    const key = role
+      ? `role:${role}`
+      : `${requestModel.toLowerCase()}::${targetModel.toLowerCase()}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    mappings.push({
+      ...(role ? { role } : {}),
+      requestModel: role ? role : requestModel,
+      targetModel,
+    });
+  });
+
+  return mappings;
 };
 
 const normalizeUsageAutoInterval = (value: unknown, fallback: number) => {
@@ -104,6 +161,11 @@ export function createCcSwitchImportConfig(
   input: Partial<CcSwitchImportConfigListItem> & Pick<CcSwitchImportConfigListItem, "clientType">,
 ): CcSwitchImportConfigListItem {
   const defaults = DEFAULT_CC_SWITCH_IMPORT_SETTINGS[input.clientType];
+  const modelMappings = normalizeModelMappings(input.modelMappings);
+  const mappedDefaultModel =
+    input.clientType === "claude"
+      ? modelMappings.find((mapping) => mapping.role === "main")?.targetModel
+      : modelMappings.find((mapping) => mapping.requestModel)?.requestModel;
 
   return {
     id: String(input.id ?? "").trim() || createConfigId(),
@@ -111,7 +173,10 @@ export function createCcSwitchImportConfig(
     providerName: String(input.providerName ?? "").trim() || defaultProviderName(input.clientType),
     note: String(input.note ?? "").trim(),
     defaultModel:
-      String(input.defaultModel ?? "").trim() || String(defaults.defaultModel ?? "").trim(),
+      String(input.defaultModel ?? "").trim() ||
+      String(mappedDefaultModel ?? "").trim() ||
+      String(defaults.defaultModel ?? "").trim(),
+    modelMappings,
     allowedChannelGroups: normalizeChannelGroups(input.allowedChannelGroups),
     endpointPath: normalizeCcSwitchEndpointPath(input.endpointPath ?? defaults.endpointPath),
     usageAutoInterval: normalizeUsageAutoInterval(

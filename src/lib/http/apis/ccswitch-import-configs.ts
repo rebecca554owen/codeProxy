@@ -1,6 +1,7 @@
 import { apiClient } from "@/lib/http/client";
 import {
   createCcSwitchImportConfig,
+  type CcSwitchModelMapping,
   type CcSwitchImportConfigListItem,
 } from "@/modules/ccswitch/ccswitchImportConfigList";
 
@@ -24,6 +25,35 @@ const normalizeStringList = (value: unknown): string[] => {
   return value.map((item) => (typeof item === "string" ? item.trim() : "")).filter(Boolean);
 };
 
+const normalizeModelMappings = (value: unknown): CcSwitchModelMapping[] => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry): CcSwitchModelMapping | null => {
+      const record = asRecord(entry);
+      if (!record) return null;
+      const role = normalizeString(record.role)?.toLowerCase();
+      const normalizedRole =
+        role === "main" || role === "haiku" || role === "sonnet" || role === "opus"
+          ? role
+          : undefined;
+      const targetModel = normalizeString(
+        record["target-model"] ?? record.targetModel ?? record.target ?? record.name,
+      );
+      const requestModel =
+        normalizeString(
+          record["request-model"] ?? record.requestModel ?? record.request ?? record.alias,
+        ) ??
+        (normalizedRole ? normalizedRole : targetModel);
+      if (!targetModel || !requestModel) return null;
+      return {
+        ...(normalizedRole ? { role: normalizedRole } : {}),
+        requestModel,
+        targetModel,
+      };
+    })
+    .filter((item): item is CcSwitchModelMapping => Boolean(item));
+};
+
 export function normalizeCcSwitchImportConfigs(raw: unknown): CcSwitchImportConfigListItem[] {
   if (!Array.isArray(raw)) return [];
 
@@ -42,6 +72,7 @@ export function normalizeCcSwitchImportConfigs(raw: unknown): CcSwitchImportConf
         providerName: normalizeString(record["provider-name"]),
         note: normalizeString(record.note),
         defaultModel: normalizeString(record["default-model"]),
+        modelMappings: normalizeModelMappings(record["model-mappings"] ?? record.modelMappings),
         allowedChannelGroups: normalizeStringList(
           record["allowed-channel-groups"] ?? record.allowedChannelGroups,
         ),
@@ -64,6 +95,11 @@ const serializeCcSwitchImportConfig = (config: CcSwitchImportConfigListItem) => 
   "provider-name": config.providerName,
   note: config.note,
   "default-model": config.defaultModel,
+  "model-mappings": config.modelMappings.map((mapping) => ({
+    ...(mapping.role ? { role: mapping.role } : {}),
+    "request-model": mapping.requestModel,
+    "target-model": mapping.targetModel,
+  })),
   "allowed-channel-groups": [...config.allowedChannelGroups],
   "endpoint-path": config.endpointPath,
   "usage-auto-interval": config.usageAutoInterval,

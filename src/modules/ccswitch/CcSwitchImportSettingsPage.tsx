@@ -13,7 +13,10 @@ import { Card } from "@/modules/ui/Card";
 import { ConfirmModal } from "@/modules/ui/ConfirmModal";
 import { useToast } from "@/modules/ui/ToastProvider";
 import { VirtualTable, type VirtualTableColumn } from "@/modules/ui/VirtualTable";
-import { CcSwitchImportConfigModal } from "@/modules/ccswitch/CcSwitchImportConfigModal";
+import {
+  CcSwitchImportConfigModal,
+  type CcSwitchChannelGroupOption,
+} from "@/modules/ccswitch/CcSwitchImportConfigModal";
 import {
   createCcSwitchImportConfig,
   normalizeCcSwitchImportConfigList,
@@ -47,9 +50,7 @@ export function CcSwitchImportSettingsPage() {
   const [draft, setDraft] = useState<CcSwitchImportConfigListItem>(() => createDraft());
   const [pendingDelete, setPendingDelete] = useState<CcSwitchImportConfigListItem | null>(null);
   const [channelGroupsLoading, setChannelGroupsLoading] = useState(false);
-  const [channelGroupOptions, setChannelGroupOptions] = useState<
-    Array<{ value: string; label: string }>
-  >([]);
+  const [channelGroupOptions, setChannelGroupOptions] = useState<CcSwitchChannelGroupOption[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -67,6 +68,12 @@ export function CcSwitchImportSettingsPage() {
               label: String(item.name ?? "")
                 .trim()
                 .toLowerCase(),
+              description:
+                typeof item.description === "string" && item.description.trim()
+                  ? item.description.trim()
+                  : undefined,
+              routePath: Array.isArray(item["path-routes"]) ? item["path-routes"][0] : "",
+              allowedModels: Array.isArray(item["allowed-models"]) ? item["allowed-models"] : [],
             }))
             .filter((item) => item.value)
             .sort((left, right) => left.label.localeCompare(right.label)),

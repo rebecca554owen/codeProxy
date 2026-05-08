@@ -675,6 +675,81 @@ describe("ApiKeysPage", () => {
     openSpy.mockRestore();
   });
 
+  test("imports a saved Claude Code preset with main and family model mappings", async () => {
+    const openSpy = vi.spyOn(window, "open").mockReturnValue(null);
+    vi.spyOn(document, "hasFocus").mockReturnValue(false);
+    state.entries = [
+      {
+        key: "sk-claude-preset-1234567890",
+        name: "Claude Preset Key",
+        "allowed-channel-groups": ["team-a"],
+        "created-at": "2026-04-14T00:00:00.000Z",
+      },
+    ];
+    state.channelGroups = [
+      {
+        name: "team-a",
+        description: "Team A route",
+        "path-routes": ["/team-a"],
+      },
+    ];
+    state.ccSwitchImportConfigs = [
+      {
+        id: "preset-claude",
+        "client-type": "claude",
+        "provider-name": "Preset Claude",
+        note: "Role defaults",
+        "default-model": "claude-sonnet-4-5",
+        "allowed-channel-groups": ["team-a"],
+        "endpoint-path": "",
+        "usage-auto-interval": 60,
+        "api-key-field": "ANTHROPIC_AUTH_TOKEN",
+        "model-mappings": [
+          { role: "main", "request-model": "main", "target-model": "claude-sonnet-4-5" },
+          { role: "haiku", "request-model": "haiku", "target-model": "claude-haiku-4-5" },
+          { role: "sonnet", "request-model": "sonnet", "target-model": "claude-sonnet-4-5" },
+          { role: "opus", "request-model": "opus", "target-model": "claude-opus-4-1" },
+        ],
+      },
+    ];
+
+    render(
+      <MemoryRouter>
+        <ThemeProvider>
+          <ToastProvider>
+            <ApiKeysPage />
+          </ToastProvider>
+        </ThemeProvider>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Claude Preset Key")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /import to cc switch/i }));
+    await screen.findByRole("dialog", { name: /import to cc switch/i });
+
+    await userEvent.click(screen.getByRole("button", { name: /import claude code/i }));
+
+    await waitFor(() => {
+      expect(openSpy).toHaveBeenCalledWith(
+        expect.stringContaining("ccswitch://v1/import?"),
+        "_self",
+      );
+    });
+
+    const openedUrl = String(openSpy.mock.calls.at(-1)?.[0] ?? "");
+    const parsed = new URL(openedUrl);
+    expect(parsed.searchParams.get("app")).toBe("claude");
+    expect(parsed.searchParams.get("name")).toBe("Preset Claude");
+    expect(parsed.searchParams.get("model")).toBe("claude-sonnet-4-5");
+    expect(parsed.searchParams.get("haikuModel")).toBe("claude-haiku-4-5");
+    expect(parsed.searchParams.get("sonnetModel")).toBe("claude-sonnet-4-5");
+    expect(parsed.searchParams.get("opusModel")).toBe("claude-opus-4-1");
+    expect(parsed.searchParams.get("apiKeyField")).toBe("ANTHROPIC_AUTH_TOKEN");
+
+    openSpy.mockRestore();
+  });
+
   test("applies the selected saved CC Switch preset in the import modal", async () => {
     const openSpy = vi.spyOn(window, "open").mockReturnValue(null);
     vi.spyOn(document, "hasFocus").mockReturnValue(false);

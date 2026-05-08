@@ -683,6 +683,7 @@ export function ApiKeysPage() {
         enabled: selection.enabled,
         providerName: selection.providerName || ccSwitchImportEntry.name || "CliProxy",
         model: selection.model,
+        modelMappings: selectedPreset?.modelMappings,
         models: ccSwitchImportModels,
         settings: importSettings,
       });

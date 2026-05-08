@@ -190,6 +190,18 @@ const normalizeOwnerPresetResponse = (payload: unknown): ModelOwnerPresetItem[] 
 export const modelsApi = {
   buildClaudeModelsEndpoint,
 
+  async listAvailableModels(params: { allowedChannelGroups?: string[] } = {}) {
+    const query = new URLSearchParams();
+    const groups = (params.allowedChannelGroups ?? [])
+      .map((group) => String(group ?? "").trim())
+      .filter(Boolean);
+    if (groups.length > 0) {
+      query.set("allowed_channel_groups", groups.join(","));
+    }
+    const qs = query.toString();
+    return normalizeModelList(await apiClient.get(`/models${qs ? `?${qs}` : ""}`));
+  },
+
   async getModelConfigs(scope: ModelConfigScope = "active") {
     return normalizeModelConfigResponse(await apiClient.get(`/model-configs?scope=${scope}`));
   },
