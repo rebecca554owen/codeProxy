@@ -4,7 +4,9 @@ import { useTranslation } from "react-i18next";
 import iconClaude from "@/assets/icons/claude.svg";
 import iconCodex from "@/assets/icons/codex.svg";
 import iconGemini from "@/assets/icons/gemini.svg";
+import { detectApiBaseFromLocation } from "@/lib/connection";
 import { channelGroupsApi } from "@/lib/http/apis/channel-groups";
+import { useOptionalAuth } from "@/modules/auth/AuthProvider";
 import { Button } from "@/modules/ui/Button";
 import { Card } from "@/modules/ui/Card";
 import { ConfirmModal } from "@/modules/ui/ConfirmModal";
@@ -17,7 +19,10 @@ import {
   writeCcSwitchImportConfigList,
   type CcSwitchImportConfigListItem,
 } from "@/modules/ccswitch/ccswitchImportConfigList";
-import { getCcSwitchClientConfig, type CcSwitchClientType } from "@/modules/ccswitch/ccswitchImport";
+import {
+  getCcSwitchClientConfig,
+  type CcSwitchClientType,
+} from "@/modules/ccswitch/ccswitchImport";
 
 const iconByType: Record<CcSwitchClientType, string> = {
   claude: iconClaude,
@@ -34,6 +39,7 @@ function createDraft(clientType: CcSwitchClientType = "codex") {
 
 export function CcSwitchImportSettingsPage() {
   const { t } = useTranslation();
+  const auth = useOptionalAuth();
   const { notify } = useToast();
   const [configs, setConfigs] = useState<CcSwitchImportConfigListItem[]>(() =>
     readCcSwitchImportConfigList(),
@@ -208,6 +214,7 @@ export function CcSwitchImportSettingsPage() {
     const normalized = writeCcSwitchImportConfigList(next);
     setConfigs(normalized);
   };
+  const importBaseUrl = auth?.state.apiBase || detectApiBaseFromLocation();
 
   return (
     <div className="space-y-6">
@@ -258,6 +265,7 @@ export function CcSwitchImportSettingsPage() {
         open={modalOpen}
         mode={modalMode}
         value={draft}
+        baseUrl={importBaseUrl}
         channelGroupOptions={channelGroupOptions}
         channelGroupsLoading={channelGroupsLoading}
         onClose={() => setModalOpen(false)}
@@ -271,9 +279,7 @@ export function CcSwitchImportSettingsPage() {
           notify({
             type: "success",
             message: t(
-              modalMode === "edit"
-                ? "ccswitch.config_updated"
-                : "ccswitch.config_created",
+              modalMode === "edit" ? "ccswitch.config_updated" : "ccswitch.config_created",
             ),
           });
         }}
