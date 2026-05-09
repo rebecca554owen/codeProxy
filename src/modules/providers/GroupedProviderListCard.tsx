@@ -46,6 +46,8 @@ export function GroupedProviderListCard({
     <Card
       title={title}
       description={description}
+      className="flex h-full min-h-0 flex-col"
+      bodyClassName="min-h-0 flex flex-1 flex-col"
       actions={
         <Button variant="primary" size="sm" onClick={onAdd}>
           <Plus size={14} />
@@ -56,7 +58,10 @@ export function GroupedProviderListCard({
       {groups.length === 0 ? (
         <EmptyState title={t("providers.no_config")} description={t("providers.no_config_desc")} />
       ) : (
-        <div className="space-y-3">
+        <div
+          data-testid="providers-tab-scroll"
+          className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1"
+        >
           {groups.map((group) => {
             const stats = aggregateGroupStats(group, getStats);
             const statusData = aggregateGroupStatusBar(group, getStatusBar);

@@ -333,4 +333,37 @@ describe("ProvidersPage openai tab", () => {
       ]);
     });
   });
+
+  test("shows provider as disabled when all key entries are disabled", async () => {
+    mocks.getOpenAIProviders.mockImplementation(
+      async () =>
+        [
+          {
+            name: "OpenAI Disabled By Keys",
+            baseUrl: "https://example.com/v1",
+            apiKeyEntries: [
+              { apiKey: "sk-openai-disabled-a-1234567890", disabled: true },
+              { apiKey: "sk-openai-disabled-b-1234567890", disabled: true },
+            ],
+            models: [{ name: "gpt-4.1" }],
+          },
+        ] as any,
+    );
+
+    render(
+      <MemoryRouter initialEntries={["/ai-providers/openai"]}>
+        <ThemeProvider>
+          <ToastProvider>
+            <Routes>
+              <Route path="/ai-providers/*" element={<ProvidersPage />} />
+            </Routes>
+          </ToastProvider>
+        </ThemeProvider>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("OpenAI Disabled By Keys")).toBeInTheDocument();
+    expect(screen.getAllByText("Disabled").length).toBeGreaterThan(0);
+    expect(screen.getByTestId("providers-tab-scroll")).toHaveClass("overflow-y-auto");
+  });
 });

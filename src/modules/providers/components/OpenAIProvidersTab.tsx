@@ -75,11 +75,13 @@ export function OpenAIProvidersTab({
             const selectionKey = provider.name.trim().toLowerCase();
             const selected = selectedKeys?.has(selectionKey) ?? false;
             const headerEntries = Object.entries(provider.headers || {});
-            const stats = getProviderStats(provider);
-            const statusData = getProviderStatusBar(provider);
             const disabledKeyCount =
               provider.apiKeyEntries?.filter((entry) => entry.disabled).length ?? 0;
             const enabledKeyCount = (provider.apiKeyEntries?.length ?? 0) - disabledKeyCount;
+            const providerEnabled = provider.disabled !== true;
+            const effectiveEnabled = providerEnabled && enabledKeyCount > 0;
+            const stats = getProviderStats(provider);
+            const statusData = getProviderStatusBar(provider);
 
             return (
               <div
@@ -100,12 +102,12 @@ export function OpenAIProvidersTab({
                       <span
                         className={[
                           "rounded-full px-2 py-0.5 text-[11px] font-medium",
-                          provider.disabled
-                            ? "bg-slate-900/10 text-slate-900 dark:bg-white/15 dark:text-white"
-                            : "bg-slate-900/5 text-slate-700 dark:bg-white/10 dark:text-white/70",
+                          effectiveEnabled
+                            ? "bg-slate-900/5 text-slate-700 dark:bg-white/10 dark:text-white/70"
+                            : "bg-slate-900/10 text-slate-900 dark:bg-white/15 dark:text-white",
                         ].join(" ")}
                       >
-                        {provider.disabled ? t("providers.disabled") : t("providers.enabled")}
+                        {effectiveEnabled ? t("providers.enabled") : t("providers.disabled")}
                       </span>
                     </p>
                     {provider.prefix ? (
@@ -265,13 +267,13 @@ export function OpenAIProvidersTab({
                     {onToggleProviderEnabled ? (
                       <div className="mt-3 max-w-sm">
                         <ToggleSwitch
-                          checked={!provider.disabled}
+                          checked={providerEnabled}
                           onCheckedChange={(enabled) => onToggleProviderEnabled(idx, enabled)}
                           label={t("providers.enable")}
                           description={t(
-                            provider.disabled
-                              ? "providers.enable_toggle_desc_off"
-                              : "providers.enable_toggle_desc_on",
+                            providerEnabled
+                              ? "providers.enable_toggle_desc_on"
+                              : "providers.enable_toggle_desc_off",
                           )}
                         />
                       </div>
