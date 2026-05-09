@@ -1,5 +1,10 @@
 import { apiClient } from "@/lib/http/client";
-import type { UsageData, ChartDataResponse, EntityStatsResponse } from "@/lib/http/types";
+import type {
+  UsageData,
+  ChartDataResponse,
+  EntityBlockStatsResponse,
+  EntityStatsResponse,
+} from "@/lib/http/types";
 
 export interface UsageExportPayload {
   version?: number;
@@ -163,6 +168,23 @@ export const usageApi = {
     return {
       source: Array.isArray(resp?.source) ? resp.source : [],
       auth_index: Array.isArray(resp?.auth_index) ? resp.auth_index : [],
+    };
+  },
+
+  async getEntityBlockStats(days = 7, apiKey = ""): Promise<EntityBlockStatsResponse> {
+    const qs = new URLSearchParams({ days: String(days) });
+    if (apiKey && apiKey !== "all") qs.set("api_key", apiKey);
+    const resp = await apiClient.get<EntityBlockStatsResponse>(
+      `/usage/entity-block-stats?${qs.toString()}`,
+    );
+    return {
+      block_config: {
+        window_start_ms: resp?.block_config?.window_start_ms ?? 0,
+        duration_ms: resp?.block_config?.duration_ms ?? 10 * 60 * 1000,
+        block_count: resp?.block_config?.block_count ?? 20,
+      },
+      by_source: Array.isArray(resp?.by_source) ? resp.by_source : [],
+      by_auth_index: Array.isArray(resp?.by_auth_index) ? resp.by_auth_index : [],
     };
   },
 

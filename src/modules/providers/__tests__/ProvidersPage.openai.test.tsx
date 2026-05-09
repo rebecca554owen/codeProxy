@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -6,45 +8,84 @@ import { ProvidersPage } from "@/modules/providers/ProvidersPage";
 import { ThemeProvider } from "@/modules/ui/ThemeProvider";
 import { ToastProvider } from "@/modules/ui/ToastProvider";
 
-const mocks = vi.hoisted(() => ({
-  getGeminiKeys: vi.fn(async (): Promise<any[]> => []),
-  getClaudeConfigs: vi.fn(async (): Promise<any[]> => []),
-  getCodexConfigs: vi.fn(async (): Promise<any[]> => []),
-  getVertexConfigs: vi.fn(async (): Promise<any[]> => []),
-  getOpenAIProviders: vi.fn(async (): Promise<any[]> => []),
-  saveCodexConfigs: vi.fn(async (_configs: unknown[]) => ({})),
-  saveOpenAIProviders: vi.fn(async (_configs: unknown[]) => ({})),
-  getEntityStats: vi.fn(async () => ({ source: [] })),
-  apiKeyEntriesList: vi.fn(async () => []),
-  channelGroupsList: vi.fn(async () => []),
-  proxiesList: vi.fn(async (): Promise<any[]> => []),
-  getModelConfigs: vi.fn(async (): Promise<any[]> => []),
-  apiCallRequest: vi.fn(async () => ({ statusCode: 200, header: {}, bodyText: "", body: {} })),
-  getAmpcode: vi.fn(async () => ({})),
-  getAmpModelMappings: vi.fn(async () => []),
-}));
+function getMocks() {
+  const store = globalThis as typeof globalThis & {
+    __providersPageOpenAiMocks__?: {
+      getGeminiKeys: ReturnType<typeof vi.fn>;
+      getClaudeConfigs: ReturnType<typeof vi.fn>;
+      getCodexConfigs: ReturnType<typeof vi.fn>;
+      getVertexConfigs: ReturnType<typeof vi.fn>;
+      getOpenAIProviders: ReturnType<typeof vi.fn>;
+      saveCodexConfigs: ReturnType<typeof vi.fn>;
+      saveOpenAIProviders: ReturnType<typeof vi.fn>;
+      getEntityStats: ReturnType<typeof vi.fn>;
+      getEntityBlockStats: ReturnType<typeof vi.fn>;
+      apiKeyEntriesList: ReturnType<typeof vi.fn>;
+      channelGroupsList: ReturnType<typeof vi.fn>;
+      proxiesList: ReturnType<typeof vi.fn>;
+      getModelConfigs: ReturnType<typeof vi.fn>;
+      apiCallRequest: ReturnType<typeof vi.fn>;
+      getAmpcode: ReturnType<typeof vi.fn>;
+      getAmpModelMappings: ReturnType<typeof vi.fn>;
+    };
+  };
+  if (!store.__providersPageOpenAiMocks__) {
+    store.__providersPageOpenAiMocks__ = {
+      getGeminiKeys: vi.fn(async (): Promise<any[]> => []),
+      getClaudeConfigs: vi.fn(async (): Promise<any[]> => []),
+      getCodexConfigs: vi.fn(async (): Promise<any[]> => []),
+      getVertexConfigs: vi.fn(async (): Promise<any[]> => []),
+      getOpenAIProviders: vi.fn(async (): Promise<any[]> => []),
+      saveCodexConfigs: vi.fn(async (_configs: unknown[]) => ({})),
+      saveOpenAIProviders: vi.fn(async (_configs: unknown[]) => ({})),
+      getEntityStats: vi.fn(async () => ({ source: [] })),
+      getEntityBlockStats: vi.fn(async () => ({
+        block_config: { window_start_ms: 0, duration_ms: 600000, block_count: 20 },
+        by_source: [],
+        by_auth_index: [],
+      })),
+      apiKeyEntriesList: vi.fn(async () => []),
+      channelGroupsList: vi.fn(async () => []),
+      proxiesList: vi.fn(async (): Promise<any[]> => []),
+      getModelConfigs: vi.fn(async (): Promise<any[]> => []),
+      apiCallRequest: vi.fn(async () => ({
+        statusCode: 200,
+        header: {},
+        bodyText: "",
+        body: {},
+      })),
+      getAmpcode: vi.fn(async () => ({})),
+      getAmpModelMappings: vi.fn(async () => []),
+    };
+  }
+  return store.__providersPageOpenAiMocks__;
+}
+
+const mocks = getMocks();
 
 vi.mock("@/lib/http/apis", () => ({
   providersApi: {
-    getGeminiKeys: mocks.getGeminiKeys,
-    getClaudeConfigs: mocks.getClaudeConfigs,
-    getCodexConfigs: mocks.getCodexConfigs,
-    getVertexConfigs: mocks.getVertexConfigs,
-    getOpenAIProviders: mocks.getOpenAIProviders,
-    saveCodexConfigs: mocks.saveCodexConfigs,
+    getGeminiKeys: getMocks().getGeminiKeys,
+    getClaudeConfigs: getMocks().getClaudeConfigs,
+    getCodexConfigs: getMocks().getCodexConfigs,
+    getVertexConfigs: getMocks().getVertexConfigs,
+    getOpenAIProviders: getMocks().getOpenAIProviders,
+    saveCodexConfigs: getMocks().saveCodexConfigs,
+    saveOpenAIProviders: getMocks().saveOpenAIProviders,
   },
   usageApi: {
-    getEntityStats: mocks.getEntityStats,
+    getEntityStats: getMocks().getEntityStats,
+    getEntityBlockStats: getMocks().getEntityBlockStats,
   },
   modelsApi: {
-    getModelConfigs: mocks.getModelConfigs,
+    getModelConfigs: getMocks().getModelConfigs,
   },
   apiCallApi: {
-    request: mocks.apiCallRequest,
+    request: getMocks().apiCallRequest,
   },
   ampcodeApi: {
-    getAmpcode: mocks.getAmpcode,
-    getModelMappings: mocks.getAmpModelMappings,
+    getAmpcode: getMocks().getAmpcode,
+    getModelMappings: getMocks().getAmpModelMappings,
   },
   getApiCallErrorMessage: (result: { bodyText?: string; statusCode?: number }) =>
     result.bodyText || `HTTP ${result.statusCode ?? 0}`,
@@ -52,19 +93,19 @@ vi.mock("@/lib/http/apis", () => ({
 
 vi.mock("@/lib/http/apis/api-keys", () => ({
   apiKeyEntriesApi: {
-    list: mocks.apiKeyEntriesList,
+    list: getMocks().apiKeyEntriesList,
   },
 }));
 
 vi.mock("@/lib/http/apis/channel-groups", () => ({
   channelGroupsApi: {
-    list: mocks.channelGroupsList,
+    list: getMocks().channelGroupsList,
   },
 }));
 
 vi.mock("@/lib/http/apis/proxies", () => ({
   proxiesApi: {
-    list: mocks.proxiesList,
+    list: getMocks().proxiesList,
   },
 }));
 
@@ -82,6 +123,7 @@ describe("ProvidersPage openai tab", () => {
     mocks.saveCodexConfigs.mockReset();
     mocks.saveOpenAIProviders.mockReset();
     mocks.getEntityStats.mockReset();
+    mocks.getEntityBlockStats.mockReset();
     mocks.apiKeyEntriesList.mockReset();
     mocks.channelGroupsList.mockReset();
     mocks.proxiesList.mockReset();
@@ -133,6 +175,27 @@ describe("ProvidersPage openai tab", () => {
           ],
         }) as any,
     );
+    mocks.getEntityBlockStats.mockImplementation(
+      async () =>
+        ({
+          block_config: {
+            window_start_ms: Date.now() - 20 * 10 * 60 * 1000,
+            duration_ms: 10 * 60 * 1000,
+            block_count: 20,
+          },
+          by_source: [
+            {
+              entity_name: "sk-openai-provider-1234567890",
+              success: 8,
+              failure: 2,
+              blocks: Array.from({ length: 20 }, (_, index) =>
+                index === 19 ? { success: 8, failure: 2 } : { success: 0, failure: 0 },
+              ),
+            },
+          ],
+          by_auth_index: [],
+        }) as any,
+    );
     mocks.getOpenAIProviders.mockImplementation(
       async () =>
         [
@@ -165,7 +228,7 @@ describe("ProvidersPage openai tab", () => {
     expect(screen.getByText("prefix: oa")).toBeInTheDocument();
     expect(screen.getByText("baseUrl: https://example.com/v1")).toBeInTheDocument();
     expect(screen.getByText(/sk-ope\*\*\*7890/)).toBeInTheDocument();
-    expect(screen.getByText("80.0%")).toBeInTheDocument();
+    expect(screen.getAllByText("80.0%").length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText("testModel: gpt-4.1")).toBeInTheDocument();
   });
 
@@ -241,8 +304,12 @@ describe("ProvidersPage openai tab", () => {
     );
 
     expect(await screen.findByText("OpenAI Main")).toBeInTheDocument();
-    const enabledSwitch = (await screen.findAllByRole("switch", { name: /Enable key entry 1/i }))[0];
-    const disabledSwitch = (await screen.findAllByRole("switch", { name: /Enable key entry 2/i }))[0];
+    const enabledSwitch = (
+      await screen.findAllByRole("switch", { name: /Enable key entry 1/i })
+    )[0];
+    const disabledSwitch = (
+      await screen.findAllByRole("switch", { name: /Enable key entry 2/i })
+    )[0];
     expect(enabledSwitch).toHaveAttribute("aria-checked", "true");
     expect(disabledSwitch).toHaveAttribute("aria-checked", "false");
 

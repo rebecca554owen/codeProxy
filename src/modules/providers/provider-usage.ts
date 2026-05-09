@@ -1,3 +1,5 @@
+import type { EntityBlockConfig, EntityBlockSeries } from "@/lib/http/types";
+
 export type KeyStatBucket = { success: number; failure: number };
 
 export type StatusBlockState = "idle" | "success" | "failure" | "mixed";
@@ -17,6 +19,9 @@ export type StatusBarData = {
   totalSuccess: number;
   totalFailure: number;
 };
+
+export const STATUS_BAR_BLOCK_COUNT = 20;
+export const STATUS_BAR_BLOCK_DURATION_MS = 10 * 60 * 1000;
 
 const USAGE_SOURCE_PREFIX_KEY = "k:";
 const USAGE_SOURCE_PREFIX_MASKED = "m:";
@@ -149,8 +154,8 @@ export function buildCandidateUsageSourceIds(input: {
 export function calculateStatusBarData(
   usageDetails: Array<{ timestamp: string; failed: boolean }>,
 ): StatusBarData {
-  const BLOCK_COUNT = 20;
-  const BLOCK_DURATION_MS = 10 * 60 * 1000;
+  const BLOCK_COUNT = STATUS_BAR_BLOCK_COUNT;
+  const BLOCK_DURATION_MS = STATUS_BAR_BLOCK_DURATION_MS;
   const WINDOW_MS = 200 * 60 * 1000;
 
   const now = Date.now();
@@ -213,8 +218,8 @@ export function calculateStatusBarData(
 }
 
 export function buildStatusBarDataFromStats(stats: KeyStatBucket): StatusBarData {
-  const blockCount = 20;
-  const blockDurationMs = 10 * 60 * 1000;
+  const blockCount = STATUS_BAR_BLOCK_COUNT;
+  const blockDurationMs = STATUS_BAR_BLOCK_DURATION_MS;
   const now = Date.now();
   const windowStart = now - blockCount * blockDurationMs;
   if (stats.success === 0 && stats.failure === 0) {
@@ -279,8 +284,8 @@ export function buildStatusBarDataFromStats(stats: KeyStatBucket): StatusBarData
 }
 
 export function fillStatusBarDetails(data: Omit<StatusBarData, "blockDetails">): StatusBarData {
-  const blockCount = data.blocks.length || 20;
-  const blockDurationMs = 10 * 60 * 1000;
+  const blockCount = data.blocks.length || STATUS_BAR_BLOCK_COUNT;
+  const blockDurationMs = STATUS_BAR_BLOCK_DURATION_MS;
   const now = Date.now();
   const windowStart = now - blockCount * blockDurationMs;
   const total = data.totalSuccess + data.totalFailure;
@@ -289,15 +294,27 @@ export function fillStatusBarDetails(data: Omit<StatusBarData, "blockDetails">):
     blockDetails: data.blocks.map((state, index) => {
       const startTime = windowStart + index * blockDurationMs;
       if (state === "idle") {
-        return { success: 0, failure: 0, rate: -1, startTime, endTime: startTime + blockDurationMs };
+        return {
+          success: 0,
+          failure: 0,
+          rate: -1,
+          startTime,
+          endTime: startTime + blockDurationMs,
+        };
       }
       const success =
         total > 0
-          ? Math.round((data.totalSuccess / blockCount) * (state === "success" ? 1 : state === "mixed" ? 0.5 : 0))
+          ? Math.round(
+              (data.totalSuccess / blockCount) *
+                (state === "success" ? 1 : state === "mixed" ? 0.5 : 0),
+            )
           : 0;
       const failure =
         total > 0
-          ? Math.round((data.totalFailure / blockCount) * (state === "failure" ? 1 : state === "mixed" ? 0.5 : 0))
+          ? Math.round(
+              (data.totalFailure / blockCount) *
+                (state === "failure" ? 1 : state === "mixed" ? 0.5 : 0),
+            )
           : 0;
       const blockTotal = success + failure;
       return {
@@ -313,4 +330,61 @@ export function fillStatusBarDetails(data: Omit<StatusBarData, "blockDetails">):
 
 export function mergeKeyStatBuckets(a: KeyStatBucket, b: KeyStatBucket): KeyStatBucket {
   return { success: a.success + b.success, failure: a.failure + b.failure };
+}
+
+export function buildStatusBarDataFromEntityBlockSeries(
+  series: EntityBlockSeries,
+  blockConfig?: EntityBlockConfig | null,
+): StatusBarData {
+  const blockCount =
+    blockConfig?.block_count && blockConfig.block_count > 0
+      ? blockConfig.block_count
+      : STATUS_BAR_BLOCK_COUNT;
+  const blockDurationMs =
+    blockConfig?.duration_ms && blockConfig.duration_ms > 0
+      ? blockConfig.duration_ms
+      : STATUS_BAR_BLOCK_DURATION_MS;
+  const windowStart =
+    typeof blockConfig?.window_start_ms === "number" && blockConfig.window_start_ms > 0
+      ? blockConfig.window_start_ms
+      : Date.now() - blockCount * blockDurationMs;
+  const sourceBlocks = Array.isArray(series.blocks) ? series.blocks : [];
+
+  const blockDetails = Array.from({ length: blockCount }, (_, index) => {
+    const block = sourceBlocks[index];
+    const success = Number.isFinite(block?.success) ? Number(block.success) : 0;
+    const failure = Number.isFinite(block?.failure) ? Number(block.failure) : 0;
+    const total = success + failure;
+    const startTime = windowStart + index * blockDurationMs;
+    return {
+      success,
+      failure,
+      rate: total > 0 ? success / total : -1,
+      startTime,
+      endTime: startTime + blockDurationMs,
+    };
+  });
+
+  const blocks: StatusBlockState[] = blockDetails.map((detail) => {
+    if (detail.success === 0 && detail.failure === 0) return "idle";
+    if (detail.failure === 0) return "success";
+    if (detail.success === 0) return "failure";
+    return "mixed";
+  });
+
+  const totalSuccess = Number.isFinite(series.success)
+    ? Number(series.success)
+    : blockDetails.reduce((sum, detail) => sum + detail.success, 0);
+  const totalFailure = Number.isFinite(series.failure)
+    ? Number(series.failure)
+    : blockDetails.reduce((sum, detail) => sum + detail.failure, 0);
+  const total = totalSuccess + totalFailure;
+
+  return {
+    blocks,
+    blockDetails,
+    successRate: total > 0 ? (totalSuccess / total) * 100 : 100,
+    totalSuccess,
+    totalFailure,
+  };
 }

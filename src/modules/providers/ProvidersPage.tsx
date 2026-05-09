@@ -14,7 +14,13 @@ import { ampcodeApi, providersApi, usageApi } from "@/lib/http/apis";
 import { apiKeyEntriesApi, type ApiKeyEntry } from "@/lib/http/apis/api-keys";
 import { channelGroupsApi, type ChannelGroupItem } from "@/lib/http/apis/channel-groups";
 import { proxiesApi, type ProxyPoolEntry } from "@/lib/http/apis/proxies";
-import type { BedrockProviderConfig, OpenAIProvider, ProviderSimpleConfig } from "@/lib/http/types";
+import type {
+  BedrockProviderConfig,
+  EntityBlockConfig,
+  EntityBlockSeries,
+  OpenAIProvider,
+  ProviderSimpleConfig,
+} from "@/lib/http/types";
 import { Button } from "@/modules/ui/Button";
 import { ConfirmModal } from "@/modules/ui/ConfirmModal";
 import { Modal } from "@/modules/ui/Modal";
@@ -22,14 +28,26 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/modules/ui/Tabs";
 import { useToast } from "@/modules/ui/ToastProvider";
 import { downloadTextAsFile } from "@/modules/auth-files/helpers/authFilesPageUtils";
 import { AmpcodePanel } from "@/modules/providers/components/AmpcodePanel";
+import { GroupedProviderModal } from "@/modules/providers/components/GroupedProviderModal";
 import { OpenAIProviderModal } from "@/modules/providers/components/OpenAIProviderModal";
 import { OpenAIProvidersTab } from "@/modules/providers/components/OpenAIProvidersTab";
 import { ProviderKeyModal } from "@/modules/providers/components/ProviderKeyModal";
+import { GroupedProviderListCard } from "@/modules/providers/GroupedProviderListCard";
 import { useOpenAIProviderEditor } from "@/modules/providers/hooks/useOpenAIProviderEditor";
 import { ProviderKeyListCard } from "@/modules/providers/ProviderKeyListCard";
 import { useProviderKeyEditor } from "@/modules/providers/hooks/useProviderKeyEditor";
 import { useProviderLatency } from "@/modules/providers/hooks/useProviderLatency";
 import { useProviderUsageSummary } from "@/modules/providers/hooks/useProviderUsageSummary";
+import {
+  buildGroupedProviderDraft,
+  deleteGroupedConfigs,
+  groupProviderConfigs,
+  replaceGroupedConfigs,
+  toggleGroupedConfigsEnabled,
+  type GroupedProviderDraft,
+  type GroupedProviderGroup,
+  type GroupedProviderType,
+} from "@/modules/providers/grouped-provider-utils";
 import { normalizeUsageSourceId, type KeyStatBucket } from "@/modules/providers/provider-usage";
 import {
   maskApiKey,
@@ -90,6 +108,10 @@ export function ProvidersPage() {
   const [proxyPoolEntries, setProxyPoolEntries] = useState<ProxyPoolEntry[]>([]);
 
   const [usageStatsBySource, setUsageStatsBySource] = useState<Record<string, KeyStatBucket>>({});
+  const [usageBlockSeriesBySource, setUsageBlockSeriesBySource] = useState<
+    Record<string, EntityBlockSeries>
+  >({});
+  const [usageBlockConfig, setUsageBlockConfig] = useState<EntityBlockConfig | null>(null);
 
   const [ampcode, setAmpcode] = useState<Record<string, unknown> | null>(null);
   const [ampUpstreamUrl, setAmpUpstreamUrl] = useState("");
@@ -116,6 +138,12 @@ export function ProvidersPage() {
   } | null>(null);
   const [importing, setImporting] = useState(false);
   const [selectedExportKeys, setSelectedExportKeys] = useState<string[]>([]);
+  const [groupedEditorOpen, setGroupedEditorOpen] = useState(false);
+  const [groupedEditorType, setGroupedEditorType] = useState<GroupedProviderType>("gemini");
+  const [groupedEditorGroupId, setGroupedEditorGroupId] = useState<string | null>(null);
+  const [groupedDraft, setGroupedDraft] = useState<GroupedProviderDraft>(() =>
+    buildGroupedProviderDraft("gemini", null),
+  );
 
   const refreshTab = useCallback(
     async (tabId: typeof tab) => {
@@ -187,21 +215,37 @@ export function ProvidersPage() {
 
   const loadUsage = useCallback(async () => {
     try {
-      const usage = await usageApi.getEntityStats(30, "all").catch(() => null);
-      if (usage?.source) {
-        const stats: Record<string, KeyStatBucket> = {};
-        usage.source.forEach((pt) => {
-          const src = normalizeUsageSourceId(pt.entity_name, maskApiKey);
-          if (src) {
-            const bucket = stats[src] ?? { success: 0, failure: 0 };
-            bucket.success += pt.requests - pt.failed;
-            bucket.failure += pt.failed;
-            stats[src] = bucket;
-          }
-        });
-        setUsageStatsBySource(stats);
-      }
-    } catch {}
+      const [usage, blockUsage] = await Promise.all([
+        usageApi.getEntityStats(30, "all").catch(() => null),
+        usageApi.getEntityBlockStats(30, "all").catch(() => null),
+      ]);
+
+      const stats: Record<string, KeyStatBucket> = {};
+      usage?.source?.forEach((pt) => {
+        const src = normalizeUsageSourceId(pt.entity_name, maskApiKey);
+        if (src) {
+          const bucket = stats[src] ?? { success: 0, failure: 0 };
+          bucket.success += pt.requests - pt.failed;
+          bucket.failure += pt.failed;
+          stats[src] = bucket;
+        }
+      });
+      setUsageStatsBySource(stats);
+
+      const blockSeries: Record<string, EntityBlockSeries> = {};
+      blockUsage?.by_source?.forEach((series) => {
+        const src = normalizeUsageSourceId(series.entity_name, maskApiKey);
+        if (src) {
+          blockSeries[src] = series;
+        }
+      });
+      setUsageBlockSeriesBySource(blockSeries);
+      setUsageBlockConfig(blockUsage?.block_config ?? null);
+    } catch {
+      setUsageStatsBySource({});
+      setUsageBlockSeriesBySource({});
+      setUsageBlockConfig(null);
+    }
   }, []);
 
   const loadAccessSnapshot = useCallback(async () => {
@@ -232,10 +276,17 @@ export function ProvidersPage() {
     getOpenAIProviderStats,
     getOpenAIKeyEntryStats,
     getOpenAIProviderStatusBar,
+    getOpenAIKeyEntryStatusBar,
   } = useProviderUsageSummary({
     usageStatsBySource,
+    usageBlockSeriesBySource,
+    usageBlockConfig,
     maskApiKey,
   });
+
+  const geminiGroups = useMemo(() => groupProviderConfigs("gemini", geminiKeys), [geminiKeys]);
+  const claudeGroups = useMemo(() => groupProviderConfigs("claude", claudeKeys), [claudeKeys]);
+  const codexGroups = useMemo(() => groupProviderConfigs("codex", codexKeys), [codexKeys]);
 
   const refreshAll = useCallback(async () => {
     await Promise.all([refreshTab(tab), loadUsage(), loadAccessSnapshot(), loadProxyPool()]);
@@ -258,6 +309,148 @@ export function ProvidersPage() {
       return summarizeProviderAccess(channelName, apiKeyEntries, channelGroups);
     },
     [apiKeyEntries, channelGroups],
+  );
+
+  const getGroupedProviderAccessSummary = useCallback(
+    (group: GroupedProviderGroup) => {
+      const channelName = String(group.name ?? "").trim();
+      if (!channelName) {
+        return null;
+      }
+      return summarizeProviderAccess(channelName, apiKeyEntries, channelGroups);
+    },
+    [apiKeyEntries, channelGroups],
+  );
+
+  const getGroupedListByType = useCallback(
+    (type: GroupedProviderType) =>
+      type === "gemini" ? geminiKeys : type === "claude" ? claudeKeys : codexKeys,
+    [claudeKeys, codexKeys, geminiKeys],
+  );
+
+  const getGroupedGroupsByType = useCallback(
+    (type: GroupedProviderType) =>
+      type === "gemini" ? geminiGroups : type === "claude" ? claudeGroups : codexGroups,
+    [claudeGroups, codexGroups, geminiGroups],
+  );
+
+  const persistGroupedProviders = useCallback(
+    async (type: GroupedProviderType, next: ProviderSimpleConfig[]) => {
+      if (type === "gemini") {
+        setGeminiKeys(next);
+        await providersApi.saveGeminiKeys(next);
+        return;
+      }
+      if (type === "claude") {
+        setClaudeKeys(next);
+        await providersApi.saveClaudeConfigs(next);
+        return;
+      }
+      setCodexKeys(next);
+      await providersApi.saveCodexConfigs(next);
+    },
+    [setClaudeKeys, setCodexKeys, setGeminiKeys],
+  );
+
+  const openGroupedEditor = useCallback(
+    (type: GroupedProviderType, group: GroupedProviderGroup | null) => {
+      setGroupedEditorType(type);
+      setGroupedEditorGroupId(group?.id ?? null);
+      setGroupedDraft(buildGroupedProviderDraft(type, group));
+      setGroupedEditorOpen(true);
+    },
+    [],
+  );
+
+  const closeGroupedEditor = useCallback(() => {
+    setGroupedEditorOpen(false);
+    setGroupedEditorGroupId(null);
+    if (location.pathname !== "/ai-providers") {
+      navigate("/ai-providers", { replace: true, viewTransition: true });
+    }
+  }, [location.pathname, navigate]);
+
+  const groupedEditorGroup = useMemo(
+    () =>
+      groupedEditorGroupId
+        ? (getGroupedGroupsByType(groupedEditorType).find(
+            (group) => group.id === groupedEditorGroupId,
+          ) ?? null)
+        : null,
+    [getGroupedGroupsByType, groupedEditorGroupId, groupedEditorType],
+  );
+
+  const saveGroupedDraft = useCallback(
+    async (configs: ProviderSimpleConfig[]) => {
+      const currentItems = getGroupedListByType(groupedEditorType);
+      const nextItems = replaceGroupedConfigs(currentItems, groupedEditorGroup, configs);
+      await persistGroupedProviders(groupedEditorType, nextItems);
+      notify({ type: "success", message: t("providers.saved") });
+      startTransition(() => void refreshAll());
+    },
+    [
+      getGroupedListByType,
+      groupedEditorGroup,
+      groupedEditorType,
+      notify,
+      persistGroupedProviders,
+      refreshAll,
+      startTransition,
+      t,
+    ],
+  );
+
+  const deleteGroupedProvider = useCallback(
+    async (type: GroupedProviderType, group: GroupedProviderGroup) => {
+      const currentItems = getGroupedListByType(type);
+      const nextItems = deleteGroupedConfigs(currentItems, group);
+      try {
+        await persistGroupedProviders(type, nextItems);
+        notify({ type: "success", message: t("providers.deleted") });
+        startTransition(() => void refreshAll());
+      } catch (err: unknown) {
+        notify({
+          type: "error",
+          message: err instanceof Error ? err.message : t("providers.delete_failed"),
+        });
+      }
+    },
+    [getGroupedListByType, notify, persistGroupedProviders, refreshAll, startTransition, t],
+  );
+
+  const toggleGroupedProviderEnabled = useCallback(
+    async (type: GroupedProviderType, group: GroupedProviderGroup, enabled: boolean) => {
+      const currentItems = getGroupedListByType(type);
+      const previousItems = [...currentItems];
+      const nextItems = toggleGroupedConfigsEnabled(currentItems, group, enabled);
+      try {
+        await persistGroupedProviders(type, nextItems);
+        notify({
+          type: "success",
+          message: enabled ? t("providers.toggle_enabled") : t("providers.toggle_disabled"),
+        });
+        startTransition(() => void refreshAll());
+      } catch (err: unknown) {
+        if (type === "gemini") setGeminiKeys(previousItems);
+        else if (type === "claude") setClaudeKeys(previousItems);
+        else setCodexKeys(previousItems);
+        notify({
+          type: "error",
+          message: err instanceof Error ? err.message : t("providers.update_failed"),
+        });
+      }
+    },
+    [
+      getGroupedListByType,
+      notify,
+      persistGroupedProviders,
+      refreshAll,
+      setClaudeKeys,
+      setCodexKeys,
+      setGeminiKeys,
+      startTransition,
+      t,
+    ],
   );
 
   const handleKeyEditorRouteClose = useCallback(() => {
@@ -322,6 +515,7 @@ export function ProvidersPage() {
     openOpenAIEditor,
     saveOpenAIDraft,
     deleteOpenAIProvider,
+    toggleOpenAIProviderEnabled,
     toggleOpenAIKeyEntryEnabled,
     discoverModels,
     applyDiscoveredModels,
@@ -348,14 +542,25 @@ export function ProvidersPage() {
     const action = parts[2] ?? "";
 
     void (async () => {
-      if (
-        provider === "gemini" ||
-        provider === "claude" ||
-        provider === "codex" ||
-        provider === "opencode-go" ||
-        provider === "vertex" ||
-        provider === "bedrock"
-      ) {
+      if (provider === "gemini" || provider === "claude" || provider === "codex") {
+        setTab(provider);
+        await refreshTab(provider);
+        if (action === "new") {
+          openGroupedEditor(provider, null);
+          return;
+        }
+        const index = Number(action);
+        if (Number.isFinite(index) && index >= 0) {
+          const groups = getGroupedGroupsByType(provider);
+          const targetGroup = groups[index] ?? null;
+          if (targetGroup) {
+            openGroupedEditor(provider, targetGroup);
+          }
+        }
+        return;
+      }
+
+      if (provider === "opencode-go" || provider === "vertex" || provider === "bedrock") {
         setTab(provider);
         await refreshTab(provider);
         if (action === "new") {
@@ -388,7 +593,15 @@ export function ProvidersPage() {
         await refreshTab("ampcode");
       }
     })();
-  }, [loading, location.pathname, openKeyEditor, openOpenAIEditor, refreshTab]);
+  }, [
+    getGroupedGroupsByType,
+    loading,
+    location.pathname,
+    openGroupedEditor,
+    openKeyEditor,
+    openOpenAIEditor,
+    refreshTab,
+  ]);
 
   const saveAmpcode = useCallback(async () => {
     try {
@@ -466,15 +679,7 @@ export function ProvidersPage() {
           return openaiProviders;
       }
     },
-    [
-      bedrockKeys,
-      claudeKeys,
-      codexKeys,
-      geminiKeys,
-      openCodeGoKeys,
-      openaiProviders,
-      vertexKeys,
-    ],
+    [bedrockKeys, claudeKeys, codexKeys, geminiKeys, openCodeGoKeys, openaiProviders, vertexKeys],
   );
 
   const currentImportKind = getImportKind();
@@ -597,7 +802,11 @@ export function ProvidersPage() {
       }
 
       try {
-        const preview = prepareProviderImport(kind, await file.text(), getCurrentItems(kind) as never);
+        const preview = prepareProviderImport(
+          kind,
+          await file.text(),
+          getCurrentItems(kind) as never,
+        );
         setImportPreview({
           kind,
           nextItems: preview.nextItems,
@@ -787,160 +996,158 @@ export function ProvidersPage() {
             </TabsList>
           </div>
           <TabsContent value="gemini" className="flex min-h-0 flex-1 flex-col">
-          <ProviderKeyListCard
-            icon={Globe}
-            title={t("providers.gemini_keys")}
-            description={t("providers.openai_desc")}
-            items={geminiKeys}
-            onAdd={() => openKeyEditor("gemini", null)}
-            onEdit={(idx) => openKeyEditor("gemini", idx)}
-            onDelete={(idx) => setConfirm({ type: "deleteKey", keyType: "gemini", index: idx })}
-            onToggleEnabled={(idx, enabled) => void toggleKeyEnabled("gemini", idx, enabled)}
-            getStats={getSimpleStats}
-            getStatusBar={getSimpleStatusBar}
-            getAccessSummary={getProviderAccessSummary}
-            getLatencyEntry={getLatencyEntry}
-            checkLatency={checkLatency}
-            selectedKeys={selectedExportKeySet}
-            onToggleSelected={toggleExportSelection}
-          />
-        </TabsContent>
+            <GroupedProviderListCard
+              icon={Globe}
+              title={t("providers.gemini_keys")}
+              description={t("providers.gemini_desc")}
+              groups={geminiGroups}
+              onAdd={() => openGroupedEditor("gemini", null)}
+              onEdit={(group) => openGroupedEditor("gemini", group)}
+              onDelete={(group) => void deleteGroupedProvider("gemini", group)}
+              onToggleEnabled={(group, enabled) =>
+                void toggleGroupedProviderEnabled("gemini", group, enabled)
+              }
+              getStats={getSimpleStats}
+              getStatusBar={getSimpleStatusBar}
+              getAccessSummary={getGroupedProviderAccessSummary}
+            />
+          </TabsContent>
 
           <TabsContent value="claude" className="flex min-h-0 flex-1 flex-col">
-          <ProviderKeyListCard
-            icon={Bot}
-            title={t("providers.claude_keys")}
-            description={t("providers.codex_desc")}
-            items={claudeKeys}
-            onAdd={() => openKeyEditor("claude", null)}
-            onEdit={(idx) => openKeyEditor("claude", idx)}
-            onDelete={(idx) => setConfirm({ type: "deleteKey", keyType: "claude", index: idx })}
-            onToggleEnabled={(idx, enabled) => void toggleKeyEnabled("claude", idx, enabled)}
-            getStats={getSimpleStats}
-            getStatusBar={getSimpleStatusBar}
-            getAccessSummary={getProviderAccessSummary}
-            getLatencyEntry={getLatencyEntry}
-            checkLatency={checkLatency}
-            selectedKeys={selectedExportKeySet}
-            onToggleSelected={toggleExportSelection}
-          />
-        </TabsContent>
+            <GroupedProviderListCard
+              icon={Bot}
+              title={t("providers.claude_keys")}
+              description={t("providers.claude_desc")}
+              groups={claudeGroups}
+              onAdd={() => openGroupedEditor("claude", null)}
+              onEdit={(group) => openGroupedEditor("claude", group)}
+              onDelete={(group) => void deleteGroupedProvider("claude", group)}
+              onToggleEnabled={(group, enabled) =>
+                void toggleGroupedProviderEnabled("claude", group, enabled)
+              }
+              getStats={getSimpleStats}
+              getStatusBar={getSimpleStatusBar}
+              getAccessSummary={getGroupedProviderAccessSummary}
+            />
+          </TabsContent>
 
           <TabsContent value="codex" className="flex min-h-0 flex-1 flex-col">
-          <ProviderKeyListCard
-            icon={FileKey}
-            title={t("providers.codex_keys")}
-            description={t("providers.gemini_desc")}
-            items={codexKeys}
-            onAdd={() => openKeyEditor("codex", null)}
-            onEdit={(idx) => openKeyEditor("codex", idx)}
-            onDelete={(idx) => setConfirm({ type: "deleteKey", keyType: "codex", index: idx })}
-            onToggleEnabled={(idx, enabled) => void toggleKeyEnabled("codex", idx, enabled)}
-            getStats={getSimpleStats}
-            getStatusBar={getSimpleStatusBar}
-            getAccessSummary={getProviderAccessSummary}
-            getLatencyEntry={getLatencyEntry}
-            checkLatency={checkLatency}
-            selectedKeys={selectedExportKeySet}
-            onToggleSelected={toggleExportSelection}
-          />
-        </TabsContent>
+            <GroupedProviderListCard
+              icon={FileKey}
+              title={t("providers.codex_keys")}
+              description={t("providers.codex_desc")}
+              groups={codexGroups}
+              onAdd={() => openGroupedEditor("codex", null)}
+              onEdit={(group) => openGroupedEditor("codex", group)}
+              onDelete={(group) => void deleteGroupedProvider("codex", group)}
+              onToggleEnabled={(group, enabled) =>
+                void toggleGroupedProviderEnabled("codex", group, enabled)
+              }
+              getStats={getSimpleStats}
+              getStatusBar={getSimpleStatusBar}
+              getAccessSummary={getGroupedProviderAccessSummary}
+            />
+          </TabsContent>
 
           <TabsContent value="opencode-go" className="flex min-h-0 flex-1 flex-col">
-          <ProviderKeyListCard
-            icon={FileKey}
-            iconSrc={iconOpenCodeLight}
-            iconDarkSrc={iconOpenCodeDark}
-            title={t("providers.opencode_go_keys")}
-            description={t("providers.opencode_go_desc")}
-            items={openCodeGoKeys}
-            onAdd={() => openKeyEditor("opencode-go", null)}
-            onEdit={(idx) => openKeyEditor("opencode-go", idx)}
-            onDelete={(idx) =>
-              setConfirm({ type: "deleteKey", keyType: "opencode-go", index: idx })
-            }
-            onToggleEnabled={(idx, enabled) => void toggleKeyEnabled("opencode-go", idx, enabled)}
-            getStats={getSimpleStats}
-            getStatusBar={getSimpleStatusBar}
-            getAccessSummary={getProviderAccessSummary}
-            showBaseUrl={false}
-            selectedKeys={selectedExportKeySet}
-            onToggleSelected={toggleExportSelection}
-          />
-        </TabsContent>
+            <ProviderKeyListCard
+              icon={FileKey}
+              iconSrc={iconOpenCodeLight}
+              iconDarkSrc={iconOpenCodeDark}
+              title={t("providers.opencode_go_keys")}
+              description={t("providers.opencode_go_desc")}
+              items={openCodeGoKeys}
+              onAdd={() => openKeyEditor("opencode-go", null)}
+              onEdit={(idx) => openKeyEditor("opencode-go", idx)}
+              onDelete={(idx) =>
+                setConfirm({ type: "deleteKey", keyType: "opencode-go", index: idx })
+              }
+              onToggleEnabled={(idx, enabled) => void toggleKeyEnabled("opencode-go", idx, enabled)}
+              getStats={getSimpleStats}
+              getStatusBar={getSimpleStatusBar}
+              getAccessSummary={getProviderAccessSummary}
+              showBaseUrl={false}
+              selectedKeys={selectedExportKeySet}
+              onToggleSelected={toggleExportSelection}
+            />
+          </TabsContent>
 
           <TabsContent value="vertex" className="flex min-h-0 flex-1 flex-col">
-          <ProviderKeyListCard
-            icon={Database}
-            title={t("providers.vertex_keys")}
-            description={t("providers.vertex_desc")}
-            items={vertexKeys}
-            onAdd={() => openKeyEditor("vertex", null)}
-            onEdit={(idx) => openKeyEditor("vertex", idx)}
-            onDelete={(idx) => setConfirm({ type: "deleteKey", keyType: "vertex", index: idx })}
-            getStats={getSimpleStats}
-            getStatusBar={getSimpleStatusBar}
-            getAccessSummary={getProviderAccessSummary}
-            getLatencyEntry={getLatencyEntry}
-            checkLatency={checkLatency}
-            selectedKeys={selectedExportKeySet}
-            onToggleSelected={toggleExportSelection}
-          />
-        </TabsContent>
+            <ProviderKeyListCard
+              icon={Database}
+              title={t("providers.vertex_keys")}
+              description={t("providers.vertex_desc")}
+              items={vertexKeys}
+              onAdd={() => openKeyEditor("vertex", null)}
+              onEdit={(idx) => openKeyEditor("vertex", idx)}
+              onDelete={(idx) => setConfirm({ type: "deleteKey", keyType: "vertex", index: idx })}
+              getStats={getSimpleStats}
+              getStatusBar={getSimpleStatusBar}
+              getAccessSummary={getProviderAccessSummary}
+              getLatencyEntry={getLatencyEntry}
+              checkLatency={checkLatency}
+              selectedKeys={selectedExportKeySet}
+              onToggleSelected={toggleExportSelection}
+            />
+          </TabsContent>
 
           <TabsContent value="bedrock" className="flex min-h-0 flex-1 flex-col">
-          <ProviderKeyListCard
-            icon={Cloud}
-            title={t("providers.bedrock_keys")}
-            description={t("providers.bedrock_desc")}
-            items={bedrockKeys}
-            onAdd={() => openKeyEditor("bedrock", null)}
-            onEdit={(idx) => openKeyEditor("bedrock", idx)}
-            onDelete={(idx) => setConfirm({ type: "deleteKey", keyType: "bedrock", index: idx })}
-            onToggleEnabled={(idx, enabled) => void toggleKeyEnabled("bedrock", idx, enabled)}
-            getStats={getSimpleStats}
-            getStatusBar={getSimpleStatusBar}
-            getAccessSummary={getProviderAccessSummary}
-            getLatencyEntry={getLatencyEntry}
-            checkLatency={checkLatency}
-            selectedKeys={selectedExportKeySet}
-            onToggleSelected={toggleExportSelection}
-          />
-        </TabsContent>
+            <ProviderKeyListCard
+              icon={Cloud}
+              title={t("providers.bedrock_keys")}
+              description={t("providers.bedrock_desc")}
+              items={bedrockKeys}
+              onAdd={() => openKeyEditor("bedrock", null)}
+              onEdit={(idx) => openKeyEditor("bedrock", idx)}
+              onDelete={(idx) => setConfirm({ type: "deleteKey", keyType: "bedrock", index: idx })}
+              onToggleEnabled={(idx, enabled) => void toggleKeyEnabled("bedrock", idx, enabled)}
+              getStats={getSimpleStats}
+              getStatusBar={getSimpleStatusBar}
+              getAccessSummary={getProviderAccessSummary}
+              getLatencyEntry={getLatencyEntry}
+              checkLatency={checkLatency}
+              selectedKeys={selectedExportKeySet}
+              onToggleSelected={toggleExportSelection}
+            />
+          </TabsContent>
 
           <TabsContent value="openai" className="flex min-h-0 flex-1 flex-col">
-          <OpenAIProvidersTab
-            providers={openaiProviders}
-            openOpenAIEditor={openOpenAIEditor}
-            confirmDelete={(index) => setConfirm({ type: "deleteOpenAI", index })}
-            maskApiKey={maskApiKey}
-            getKeyEntryStats={getOpenAIKeyEntryStats}
-            getProviderStats={getOpenAIProviderStats}
-            getProviderStatusBar={getOpenAIProviderStatusBar}
-            onToggleKeyEntryEnabled={(providerIndex, entryIndex, enabled) =>
-              void toggleOpenAIKeyEntryEnabled(providerIndex, entryIndex, enabled)
-            }
-            selectedKeys={selectedExportKeySet}
-            onToggleSelected={toggleExportSelection}
-          />
-        </TabsContent>
+            <OpenAIProvidersTab
+              providers={openaiProviders}
+              openOpenAIEditor={openOpenAIEditor}
+              confirmDelete={(index) => setConfirm({ type: "deleteOpenAI", index })}
+              maskApiKey={maskApiKey}
+              getKeyEntryStats={getOpenAIKeyEntryStats}
+              getProviderStats={getOpenAIProviderStats}
+              getProviderStatusBar={getOpenAIProviderStatusBar}
+              getKeyEntryStatusBar={getOpenAIKeyEntryStatusBar}
+              onToggleProviderEnabled={(providerIndex, enabled) =>
+                void toggleOpenAIProviderEnabled(providerIndex, enabled)
+              }
+              onToggleKeyEntryEnabled={(providerIndex, entryIndex, enabled) =>
+                void toggleOpenAIKeyEntryEnabled(providerIndex, entryIndex, enabled)
+              }
+              selectedKeys={selectedExportKeySet}
+              onToggleSelected={toggleExportSelection}
+            />
+          </TabsContent>
 
           <TabsContent value="ampcode" className="flex min-h-0 flex-1 flex-col">
-          <AmpcodePanel
-            loading={loading}
-            isPending={isPending}
-            saveAmpcode={saveAmpcode}
-            ampcode={ampcode}
-            ampMappings={ampMappings}
-            ampUpstreamUrl={ampUpstreamUrl}
-            setAmpUpstreamUrl={setAmpUpstreamUrl}
-            ampUpstreamApiKey={ampUpstreamApiKey}
-            setAmpUpstreamApiKey={setAmpUpstreamApiKey}
-            ampForceMappings={ampForceMappings}
-            setAmpForceMappings={setAmpForceMappings}
-            setAmpMappings={setAmpMappings}
-          />
-        </TabsContent>
+            <AmpcodePanel
+              loading={loading}
+              isPending={isPending}
+              saveAmpcode={saveAmpcode}
+              ampcode={ampcode}
+              ampMappings={ampMappings}
+              ampUpstreamUrl={ampUpstreamUrl}
+              setAmpUpstreamUrl={setAmpUpstreamUrl}
+              ampUpstreamApiKey={ampUpstreamApiKey}
+              setAmpUpstreamApiKey={setAmpUpstreamApiKey}
+              ampForceMappings={ampForceMappings}
+              setAmpForceMappings={setAmpForceMappings}
+              setAmpMappings={setAmpMappings}
+            />
+          </TabsContent>
         </div>
       </Tabs>
 
@@ -981,6 +1188,29 @@ export function ProvidersPage() {
         proxyPoolEntries={proxyPoolEntries}
         copyText={copyText}
         maskApiKey={maskApiKey}
+      />
+
+      <GroupedProviderModal
+        open={groupedEditorOpen}
+        provider={groupedEditorType}
+        group={groupedEditorGroup}
+        draft={groupedDraft}
+        setDraft={setGroupedDraft}
+        close={closeGroupedEditor}
+        save={saveGroupedDraft}
+        proxyPoolEntries={proxyPoolEntries}
+        getKeyStats={(entry) =>
+          getSimpleStats({
+            apiKey: entry.apiKey,
+            prefix: groupedDraft.prefix,
+          })
+        }
+        getKeyStatusBar={(entry) =>
+          getSimpleStatusBar({
+            apiKey: entry.apiKey,
+            prefix: groupedDraft.prefix,
+          })
+        }
       />
 
       <ConfirmModal
@@ -1024,11 +1254,7 @@ export function ProvidersPage() {
         }}
         footer={
           <>
-            <Button
-              variant="secondary"
-              onClick={() => setImportPreview(null)}
-              disabled={importing}
-            >
+            <Button variant="secondary" onClick={() => setImportPreview(null)} disabled={importing}>
               {t("common.cancel")}
             </Button>
             <Button

@@ -218,6 +218,40 @@ export function useOpenAIProviderEditor({
     ],
   );
 
+  const toggleOpenAIProviderEnabled = useCallback(
+    async (providerIndex: number, enabled: boolean) => {
+      const provider = openaiProviders[providerIndex];
+      if (!provider) return;
+
+      const prev = openaiProviders;
+      const next = prev.map((item, itemIndex) =>
+        itemIndex === providerIndex
+          ? {
+              ...item,
+              ...(enabled ? { disabled: undefined } : { disabled: true }),
+            }
+          : item,
+      );
+
+      setOpenaiProviders(next);
+      try {
+        await providersApi.saveOpenAIProviders(next);
+        notify({
+          type: "success",
+          message: enabled ? t("providers.toggle_enabled") : t("providers.toggle_disabled"),
+        });
+        startRefreshTransition(() => void refreshAll());
+      } catch (err: unknown) {
+        setOpenaiProviders(prev);
+        notify({
+          type: "error",
+          message: err instanceof Error ? err.message : t("providers.update_failed"),
+        });
+      }
+    },
+    [notify, openaiProviders, refreshAll, setOpenaiProviders, startRefreshTransition, t],
+  );
+
   const discoverModels = useCallback(async () => {
     const baseUrl = openaiDraft.baseUrl.trim();
     if (!baseUrl) {
@@ -300,6 +334,7 @@ export function useOpenAIProviderEditor({
     openOpenAIEditor,
     saveOpenAIDraft,
     deleteOpenAIProvider,
+    toggleOpenAIProviderEnabled,
     toggleOpenAIKeyEntryEnabled,
     discoverModels,
     applyDiscoveredModels,

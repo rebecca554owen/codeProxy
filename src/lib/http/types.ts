@@ -163,6 +163,30 @@ export interface EntityStatsResponse {
   auth_index: EntityStatPoint[];
 }
 
+export interface EntityUsageBlock {
+  success: number;
+  failure: number;
+}
+
+export interface EntityBlockSeries {
+  entity_name: string;
+  success: number;
+  failure: number;
+  blocks: EntityUsageBlock[];
+}
+
+export interface EntityBlockConfig {
+  window_start_ms: number;
+  duration_ms: number;
+  block_count: number;
+}
+
+export interface EntityBlockStatsResponse {
+  block_config: EntityBlockConfig;
+  by_source: EntityBlockSeries[];
+  by_auth_index: EntityBlockSeries[];
+}
+
 export interface ProviderModel {
   name?: string;
   alias?: string;

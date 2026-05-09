@@ -13,12 +13,20 @@ interface OpenAIProvidersTabProps {
   openOpenAIEditor: (index: number | null) => void;
   confirmDelete: (index: number) => void;
   maskApiKey: (value: string) => string;
-  getKeyEntryStats: (entry: NonNullable<OpenAIProvider["apiKeyEntries"]>[number]) => {
+  getKeyEntryStats: (
+    provider: OpenAIProvider,
+    entry: NonNullable<OpenAIProvider["apiKeyEntries"]>[number],
+  ) => {
     success: number;
     failure: number;
   };
   getProviderStats: (provider: OpenAIProvider) => { success: number; failure: number };
   getProviderStatusBar: (provider: OpenAIProvider) => StatusBarData;
+  getKeyEntryStatusBar: (
+    provider: OpenAIProvider,
+    entry: NonNullable<OpenAIProvider["apiKeyEntries"]>[number],
+  ) => StatusBarData;
+  onToggleProviderEnabled?: (providerIndex: number, enabled: boolean) => void;
   onToggleKeyEntryEnabled?: (providerIndex: number, entryIndex: number, enabled: boolean) => void;
   selectedKeys?: Set<string>;
   onToggleSelected?: (key: string, checked: boolean) => void;
@@ -32,6 +40,8 @@ export function OpenAIProvidersTab({
   getKeyEntryStats,
   getProviderStats,
   getProviderStatusBar,
+  getKeyEntryStatusBar,
+  onToggleProviderEnabled,
   onToggleKeyEntryEnabled,
   selectedKeys,
   onToggleSelected,
@@ -57,7 +67,10 @@ export function OpenAIProvidersTab({
           description={t("providers.no_openai_desc")}
         />
       ) : (
-        <div data-testid="providers-tab-scroll" className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
+        <div
+          data-testid="providers-tab-scroll"
+          className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1"
+        >
           {providers.map((provider, idx) => {
             const selectionKey = provider.name.trim().toLowerCase();
             const selected = selectedKeys?.has(selectionKey) ?? false;
@@ -124,14 +137,15 @@ export function OpenAIProvidersTab({
                         </p>
                         <div className="space-y-1">
                           {provider.apiKeyEntries.map((entry, entryIndex) => {
-                            const entryStats = getKeyEntryStats(entry);
+                            const entryStats = getKeyEntryStats(provider, entry);
+                            const entryStatusData = getKeyEntryStatusBar(provider, entry);
                             const entryEnabled = entry.disabled !== true;
                             return (
                               <div
-                                key={`${entry.apiKey}:${entryIndex}`}
+                                key={`${provider.name}:${entry.apiKey}:${entry.proxyId ?? ""}:${entry.proxyUrl ?? ""}:${entryIndex}`}
                                 className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white/70 px-3 py-2 text-xs dark:border-neutral-800 dark:bg-neutral-950/60"
                               >
-                                <div className="min-w-0">
+                                <div className="min-w-0 flex-1">
                                   <p className="truncate font-mono text-slate-900 dark:text-white">
                                     {entryIndex + 1}. {maskApiKey(entry.apiKey)}
                                   </p>
@@ -144,7 +158,9 @@ export function OpenAIProvidersTab({
                                           : "bg-slate-900/5 text-slate-700 dark:bg-white/10 dark:text-white/70",
                                       ].join(" ")}
                                     >
-                                      {entry.disabled ? t("providers.disabled") : t("providers.enabled")}
+                                      {entry.disabled
+                                        ? t("providers.disabled")
+                                        : t("providers.enabled")}
                                     </span>
                                   </div>
                                   {entry.proxyUrl ? (
@@ -152,6 +168,11 @@ export function OpenAIProvidersTab({
                                       proxy: {entry.proxyUrl}
                                     </p>
                                   ) : null}
+                                  <ProviderStatusBar
+                                    data={entryStatusData}
+                                    compact
+                                    className="mt-2"
+                                  />
                                 </div>
                                 <div className="flex flex-wrap items-center gap-2 tabular-nums">
                                   <span
@@ -162,7 +183,9 @@ export function OpenAIProvidersTab({
                                         : "bg-amber-500/15 text-amber-700 dark:text-amber-200",
                                     ].join(" ")}
                                   >
-                                    {entryEnabled ? t("providers.enabled") : t("providers.disabled")}
+                                    {entryEnabled
+                                      ? t("providers.enabled")
+                                      : t("providers.disabled")}
                                   </span>
                                   <span className="rounded-full bg-emerald-600/10 px-2 py-0.5 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200">
                                     {t("providers.success_stats", { count: entryStats.success })}
@@ -196,11 +219,15 @@ export function OpenAIProvidersTab({
                         {t("providers.api_key")}: {provider.apiKeyEntries?.length ?? 0}
                       </span>
                       <span>·</span>
-                      <span>{t("providers.enabled")}: {enabledKeyCount}</span>
+                      <span>
+                        {t("providers.enabled")}: {enabledKeyCount}
+                      </span>
                       {disabledKeyCount > 0 ? (
                         <>
                           <span>·</span>
-                          <span>{t("providers.disabled")}: {disabledKeyCount}</span>
+                          <span>
+                            {t("providers.disabled")}: {disabledKeyCount}
+                          </span>
                         </>
                       ) : null}
                       <span>·</span>
@@ -232,6 +259,21 @@ export function OpenAIProvidersTab({
                               : model.name}
                           </span>
                         ))}
+                      </div>
+                    ) : null}
+
+                    {onToggleProviderEnabled ? (
+                      <div className="mt-3 max-w-sm">
+                        <ToggleSwitch
+                          checked={!provider.disabled}
+                          onCheckedChange={(enabled) => onToggleProviderEnabled(idx, enabled)}
+                          label={t("providers.enable")}
+                          description={t(
+                            provider.disabled
+                              ? "providers.enable_toggle_desc_off"
+                              : "providers.enable_toggle_desc_on",
+                          )}
+                        />
                       </div>
                     ) : null}
 
