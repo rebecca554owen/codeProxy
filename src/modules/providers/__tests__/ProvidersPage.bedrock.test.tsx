@@ -7,39 +7,49 @@ import { ThemeProvider } from "@/modules/ui/ThemeProvider";
 import { ToastProvider } from "@/modules/ui/ToastProvider";
 
 const mocks = vi.hoisted(() => ({
-  getGeminiKeys: vi.fn(async () => []),
-  getClaudeConfigs: vi.fn(async () => []),
-  getCodexConfigs: vi.fn(async () => []),
-  getVertexConfigs: vi.fn(async () => []),
-  getBedrockConfigs: vi.fn(async () => []),
-  getOpenAIProviders: vi.fn(async () => []),
+  getGeminiKeys: vi.fn(async (): Promise<any[]> => []),
+  getClaudeConfigs: vi.fn(async (): Promise<any[]> => []),
+  getCodexConfigs: vi.fn(async (): Promise<any[]> => []),
+  getVertexConfigs: vi.fn(async (): Promise<any[]> => []),
+  getBedrockConfigs: vi.fn(async (): Promise<any[]> => []),
+  getOpenAIProviders: vi.fn(async (): Promise<any[]> => []),
   saveBedrockConfigs: vi.fn(async (_configs: unknown[]) => ({})),
   getEntityStats: vi.fn(async () => ({ source: [] })),
   apiKeyEntriesList: vi.fn(async () => []),
   channelGroupsList: vi.fn(async () => []),
   proxiesList: vi.fn(async (): Promise<any[]> => []),
+  getModelConfigs: vi.fn(async (): Promise<any[]> => []),
+  apiCallRequest: vi.fn(async () => ({ statusCode: 200, header: {}, bodyText: "", body: {} })),
+  getAmpcode: vi.fn(async () => ({})),
+  getAmpModelMappings: vi.fn(async () => []),
 }));
 
-vi.mock("@/lib/http/apis", async (importOriginal) => {
-  const mod = await importOriginal<typeof import("@/lib/http/apis")>();
-  return {
-    ...mod,
-    providersApi: {
-      ...mod.providersApi,
-      getGeminiKeys: mocks.getGeminiKeys,
-      getClaudeConfigs: mocks.getClaudeConfigs,
-      getCodexConfigs: mocks.getCodexConfigs,
-      getVertexConfigs: mocks.getVertexConfigs,
-      getBedrockConfigs: mocks.getBedrockConfigs,
-      getOpenAIProviders: mocks.getOpenAIProviders,
-      saveBedrockConfigs: mocks.saveBedrockConfigs,
-    },
-    usageApi: {
-      ...mod.usageApi,
-      getEntityStats: mocks.getEntityStats,
-    },
-  };
-});
+vi.mock("@/lib/http/apis", () => ({
+  providersApi: {
+    getGeminiKeys: mocks.getGeminiKeys,
+    getClaudeConfigs: mocks.getClaudeConfigs,
+    getCodexConfigs: mocks.getCodexConfigs,
+    getVertexConfigs: mocks.getVertexConfigs,
+    getBedrockConfigs: mocks.getBedrockConfigs,
+    getOpenAIProviders: mocks.getOpenAIProviders,
+    saveBedrockConfigs: mocks.saveBedrockConfigs,
+  },
+  usageApi: {
+    getEntityStats: mocks.getEntityStats,
+  },
+  modelsApi: {
+    getModelConfigs: mocks.getModelConfigs,
+  },
+  apiCallApi: {
+    request: mocks.apiCallRequest,
+  },
+  ampcodeApi: {
+    getAmpcode: mocks.getAmpcode,
+    getModelMappings: mocks.getAmpModelMappings,
+  },
+  getApiCallErrorMessage: (result: { bodyText?: string; statusCode?: number }) =>
+    result.bodyText || `HTTP ${result.statusCode ?? 0}`,
+}));
 
 vi.mock("@/lib/http/apis/api-keys", () => ({
   apiKeyEntriesApi: {

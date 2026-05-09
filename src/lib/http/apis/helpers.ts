@@ -112,6 +112,9 @@ export const serializeProviderKey = (config: ProviderSimpleConfig) => {
   if (prefix) payload.prefix = prefix;
   const baseUrl = normalizeString(config.baseUrl);
   if (baseUrl) payload["base-url"] = baseUrl;
+  if (typeof config.priority === "number" && Number.isFinite(config.priority)) {
+    payload.priority = config.priority;
+  }
   const proxyUrl = normalizeString(config.proxyUrl);
   if (proxyUrl) payload["proxy-url"] = proxyUrl;
   const proxyId = normalizeString(config.proxyId);
@@ -155,6 +158,9 @@ export const serializeGeminiKey = (config: ProviderSimpleConfig) => {
   if (prefix) payload.prefix = prefix;
   const baseUrl = normalizeString(config.baseUrl);
   if (baseUrl) payload["base-url"] = baseUrl;
+  if (typeof config.priority === "number" && Number.isFinite(config.priority)) {
+    payload.priority = config.priority;
+  }
   const proxyId = normalizeString(config.proxyId);
   if (proxyId) payload["proxy-id"] = proxyId;
   const headers = serializeHeaders(config.headers);
@@ -207,6 +213,7 @@ export const serializeBedrockKey = (config: BedrockProviderConfig) => {
 
 export const serializeOpenAIProvider = (provider: OpenAIProvider) => {
   const payload: Record<string, unknown> = { name: provider.name };
+  if (provider.disabled) payload.disabled = true;
   const baseUrl = normalizeString(provider.baseUrl);
   if (baseUrl) payload["base-url"] = baseUrl;
   const prefix = normalizeString(provider.prefix);
@@ -227,7 +234,7 @@ export const serializeOpenAIProvider = (provider: OpenAIProvider) => {
         const apiKey = normalizeString(entry.apiKey) ?? "";
         if (!apiKey) return null;
         const entryPayload: Record<string, unknown> = { "api-key": apiKey };
-        if (entry.disabled === true) entryPayload.disabled = true;
+        if (entry.disabled) entryPayload.disabled = true;
         const proxyUrl = normalizeString(entry.proxyUrl);
         if (proxyUrl) entryPayload["proxy-url"] = proxyUrl;
         const proxyId = normalizeString(entry.proxyId);

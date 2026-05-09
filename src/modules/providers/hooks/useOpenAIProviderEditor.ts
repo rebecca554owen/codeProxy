@@ -108,6 +108,7 @@ export function useOpenAIProviderEditor({
 
     return {
       name,
+      ...(openaiDraft.disabled ? { disabled: true } : {}),
       baseUrl,
       ...(openaiDraft.prefix.trim() ? { prefix: openaiDraft.prefix.trim() } : {}),
       ...(headers ? { headers } : {}),

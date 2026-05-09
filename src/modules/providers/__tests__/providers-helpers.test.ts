@@ -67,6 +67,7 @@ describe("providers helpers", () => {
     expect(draft.name).toBe("OpenAI Main");
     expect(draft.baseUrl).toBe("https://example.com/v1");
     expect(draft.priorityText).toBe("5");
+    expect(draft.disabled).toBe(false);
     expect(draft.headersEntries).toEqual([
       { id: expect.any(String), key: "x-provider", value: "openai" },
     ]);

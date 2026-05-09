@@ -7,6 +7,7 @@ import { buildModelsEndpoint } from "@/modules/providers/providers-helpers";
 import { Button } from "@/modules/ui/Button";
 import { TextInput } from "@/modules/ui/Input";
 import { Modal } from "@/modules/ui/Modal";
+import { Select } from "@/modules/ui/Select";
 import { ToggleSwitch } from "@/modules/ui/ToggleSwitch";
 import { KeyValueInputList } from "@/modules/providers/KeyValueInputList";
 import { ModelInputList } from "@/modules/providers/ModelInputList";
@@ -78,6 +79,17 @@ export function OpenAIProviderModal({
     estimateSize: () => 28,
     overscan: 12,
   });
+  const testModelOptions = useMemo(() => {
+    const seen = new Set<string>();
+    return openaiDraft.modelEntries.reduce<Array<{ value: string; label: string }>>((acc, entry) => {
+      const name = entry.name.trim();
+      if (!name || seen.has(name)) return acc;
+      seen.add(name);
+      const alias = entry.alias.trim();
+      acc.push({ value: name, label: alias && alias !== name ? `${name} (${alias})` : name });
+      return acc;
+    }, []);
+  }, [openaiDraft.modelEntries]);
 
   const selectAllDiscovered = () => {
     setDiscoverSelected((prev) => {
@@ -94,6 +106,7 @@ export function OpenAIProviderModal({
   return (
     <Modal
       open={open}
+      maxWidth="max-w-[96rem]"
       title={
         editOpenAIIndex === null
           ? t("providers.add_openai_provider")
@@ -187,15 +200,33 @@ export function OpenAIProviderModal({
             <p className="text-sm font-semibold text-slate-900 dark:text-white">
               {t("providers.test_model_label")}
             </p>
-            <TextInput
+            <Select
               value={openaiDraft.testModel}
-              onChange={(e) => {
-                const value = e.currentTarget.value;
-                setOpenaiDraft((prev) => ({ ...prev, testModel: value }));
-              }}
+              onChange={(value) => setOpenaiDraft((prev) => ({ ...prev, testModel: value }))}
+              options={testModelOptions}
               placeholder={t("providers.test_model_placeholder")}
+              aria-label={t("providers.test_model_label")}
+              disabled={testModelOptions.length === 0}
             />
           </div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-3 dark:border-neutral-800 dark:bg-neutral-900/70">
+          <ToggleSwitch
+            checked={!openaiDraft.disabled}
+            onCheckedChange={(enabled) =>
+              setOpenaiDraft((prev) => ({
+                ...prev,
+                disabled: !enabled,
+              }))
+            }
+            label={t("providers.enable")}
+            description={t(
+              openaiDraft.disabled
+                ? "providers.enable_toggle_desc_off"
+                : "providers.enable_toggle_desc_on",
+            )}
+          />
         </div>
 
         <div className="border-t border-slate-200/60 pt-5 dark:border-neutral-800/60">
@@ -242,44 +273,74 @@ export function OpenAIProviderModal({
                 key={entry.id}
                 className="rounded-2xl border border-slate-200 bg-white/70 p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-950/60"
               >
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex flex-wrap items-center gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3 dark:border-neutral-800">
+                  <div className="min-w-0">
                     <p className="text-sm font-semibold text-slate-900 dark:text-white">
                       {t("providers.key_number", { num: idx + 1 })}
                     </p>
-                    <ToggleSwitch
-                      checked={!entry.disabled}
-                      ariaLabel={`${t("providers.enable_key_entry")} ${idx + 1}`}
-                      onCheckedChange={(enabled) => {
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
+                      <span
+                        className={[
+                          "rounded-full px-2 py-0.5",
+                          entry.disabled
+                            ? "bg-slate-900/10 text-slate-900 dark:bg-white/15 dark:text-white"
+                            : "bg-slate-900/5 text-slate-700 dark:bg-white/10 dark:text-white/70",
+                        ].join(" ")}
+                      >
+                        {entry.disabled ? t("providers.disabled") : t("providers.enabled")}
+                      </span>
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-600 dark:bg-neutral-800 dark:text-white/60">
+                        {t("providers.show_masked_key", { key: maskApiKey(entry.apiKey) })}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="min-w-[132px]">
+                      <ToggleSwitch
+                        checked={!entry.disabled}
+                        onCheckedChange={(enabled) =>
+                          setOpenaiDraft((prev) => ({
+                            ...prev,
+                            apiKeyEntries: prev.apiKeyEntries.map((it, i) =>
+                              i === idx ? { ...it, disabled: !enabled } : it,
+                            ),
+                          }))
+                        }
+                        label={t("providers.enable")}
+                        description={t(
+                          entry.disabled
+                            ? "providers.enable_toggle_desc_off"
+                            : "providers.enable_toggle_desc_on",
+                        )}
+                      />
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => void copyText(entry.apiKey.trim())}
+                      disabled={!entry.apiKey.trim()}
+                    >
+                      <Copy size={14} />
+                      {t("providers.copy")}
+                    </Button>
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      onClick={() =>
                         setOpenaiDraft((prev) => ({
                           ...prev,
-                          apiKeyEntries: prev.apiKeyEntries.map((it, i) =>
-                            i === idx ? { ...it, disabled: !enabled } : it,
-                          ),
-                        }));
-                      }}
-                    />
-                    <span className="text-xs font-semibold text-slate-500 dark:text-white/55">
-                      {!entry.disabled ? t("providers.enabled") : t("providers.disabled")}
-                    </span>
+                          apiKeyEntries: prev.apiKeyEntries.filter((_, i) => i !== idx),
+                        }))
+                      }
+                      disabled={openaiDraft.apiKeyEntries.length <= 1}
+                    >
+                      <Trash2 size={14} />
+                      {t("providers.delete")}
+                    </Button>
                   </div>
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    onClick={() =>
-                      setOpenaiDraft((prev) => ({
-                        ...prev,
-                        apiKeyEntries: prev.apiKeyEntries.filter((_, i) => i !== idx),
-                      }))
-                    }
-                    disabled={openaiDraft.apiKeyEntries.length <= 1}
-                  >
-                    <Trash2 size={14} />
-                    {t("providers.delete")}
-                  </Button>
                 </div>
 
-                <div className="mt-3 grid gap-3 md:grid-cols-3">
+                <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(280px,1.05fr)_minmax(240px,0.95fr)_minmax(360px,1.6fr)]">
                   <div className="space-y-2">
                     <p className="text-sm font-semibold text-slate-900 dark:text-white">
                       {t("providers.api_key")}
@@ -297,18 +358,6 @@ export function OpenAIProviderModal({
                       }}
                       placeholder={t("providers.api_key_placeholder")}
                     />
-                    <div className="flex items-center justify-between text-xs text-slate-500 dark:text-white/55">
-                      <span>{t("providers.show_masked_key", { key: maskApiKey(entry.apiKey) })}</span>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => void copyText(entry.apiKey.trim())}
-                        disabled={!entry.apiKey.trim()}
-                      >
-                        <Copy size={14} />
-                        {t("providers.copy")}
-                      </Button>
-                    </div>
                   </div>
                   <div className="space-y-2">
                     <ProxyPoolSelect
@@ -343,6 +392,7 @@ export function OpenAIProviderModal({
                         }));
                       }}
                       placeholder={t("providers.proxy_url_placeholder")}
+                      className="font-mono"
                     />
                   </div>
                 </div>

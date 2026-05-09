@@ -7,57 +7,64 @@ import { ThemeProvider } from "@/modules/ui/ThemeProvider";
 import { ToastProvider } from "@/modules/ui/ToastProvider";
 
 const mocks = vi.hoisted(() => ({
-  getGeminiKeys: vi.fn(async () => []),
-  getClaudeConfigs: vi.fn(async () => []),
-  getCodexConfigs: vi.fn(async () => []),
-  getVertexConfigs: vi.fn(async () => []),
-  getBedrockConfigs: vi.fn(async () => []),
+  getGeminiKeys: vi.fn(async (): Promise<any[]> => []),
+  getClaudeConfigs: vi.fn(async (): Promise<any[]> => []),
+  getCodexConfigs: vi.fn(async (): Promise<any[]> => []),
+  getVertexConfigs: vi.fn(async (): Promise<any[]> => []),
+  getBedrockConfigs: vi.fn(async (): Promise<any[]> => []),
   getOpenCodeGoConfigs: vi.fn(async (): Promise<any[]> => []),
-  getOpenAIProviders: vi.fn(async () => []),
+  getOpenAIProviders: vi.fn(async (): Promise<any[]> => []),
   saveOpenCodeGoConfigs: vi.fn(async (_configs: unknown[]) => ({})),
-  apiCallRequest: vi.fn(async (_payload: unknown) => ({
-    statusCode: 200,
-    header: {},
-    bodyText: "",
-    body: {
-      object: "list",
-      data: [
-        { id: "deepseek-v4-flash", object: "model", owned_by: "opencode" },
-        { id: "kimi-k2.6", object: "model", owned_by: "opencode" },
-      ],
-    },
-  })),
+  apiCallRequest: vi.fn(async () => ({ statusCode: 200, header: {}, bodyText: "", body: {} })),
   getEntityStats: vi.fn(async () => ({ source: [] })),
   apiKeyEntriesList: vi.fn(async () => []),
   channelGroupsList: vi.fn(async () => []),
   proxiesList: vi.fn(async (): Promise<any[]> => []),
+  getModelConfigs: vi.fn(async (): Promise<any[]> => []),
+  getAmpcode: vi.fn(async () => ({})),
+  getAmpModelMappings: vi.fn(async () => []),
 }));
 
-vi.mock("@/lib/http/apis", async (importOriginal) => {
-  const mod = await importOriginal<typeof import("@/lib/http/apis")>();
-  return {
-    ...mod,
-    providersApi: {
-      ...mod.providersApi,
-      getGeminiKeys: mocks.getGeminiKeys,
-      getClaudeConfigs: mocks.getClaudeConfigs,
-      getCodexConfigs: mocks.getCodexConfigs,
-      getVertexConfigs: mocks.getVertexConfigs,
-      getBedrockConfigs: mocks.getBedrockConfigs,
-      getOpenCodeGoConfigs: mocks.getOpenCodeGoConfigs,
-      getOpenAIProviders: mocks.getOpenAIProviders,
-      saveOpenCodeGoConfigs: mocks.saveOpenCodeGoConfigs,
-    },
-    usageApi: {
-      ...mod.usageApi,
-      getEntityStats: mocks.getEntityStats,
-    },
-    apiCallApi: {
-      ...mod.apiCallApi,
-      request: mocks.apiCallRequest,
-    },
-  };
-});
+const apiCallResponse = {
+  statusCode: 200,
+  header: {},
+  bodyText: "",
+  body: {
+    object: "list",
+    data: [
+      { id: "deepseek-v4-flash", object: "model", owned_by: "opencode" },
+      { id: "kimi-k2.6", object: "model", owned_by: "opencode" },
+    ],
+  },
+};
+
+vi.mock("@/lib/http/apis", () => ({
+  providersApi: {
+    getGeminiKeys: mocks.getGeminiKeys,
+    getClaudeConfigs: mocks.getClaudeConfigs,
+    getCodexConfigs: mocks.getCodexConfigs,
+    getVertexConfigs: mocks.getVertexConfigs,
+    getBedrockConfigs: mocks.getBedrockConfigs,
+    getOpenCodeGoConfigs: mocks.getOpenCodeGoConfigs,
+    getOpenAIProviders: mocks.getOpenAIProviders,
+    saveOpenCodeGoConfigs: mocks.saveOpenCodeGoConfigs,
+  },
+  usageApi: {
+    getEntityStats: mocks.getEntityStats,
+  },
+  apiCallApi: {
+    request: mocks.apiCallRequest,
+  },
+  modelsApi: {
+    getModelConfigs: mocks.getModelConfigs,
+  },
+  ampcodeApi: {
+    getAmpcode: mocks.getAmpcode,
+    getModelMappings: mocks.getAmpModelMappings,
+  },
+  getApiCallErrorMessage: (result: { bodyText?: string; statusCode?: number }) =>
+    result.bodyText || `HTTP ${result.statusCode ?? 0}`,
+}));
 
 vi.mock("@/lib/http/apis/api-keys", () => ({
   apiKeyEntriesApi: {
@@ -88,18 +95,7 @@ describe("ProvidersPage OpenCode Go tab", () => {
     mocks.getOpenCodeGoConfigs.mockImplementation(async () => []);
     mocks.getOpenAIProviders.mockImplementation(async () => []);
     mocks.saveOpenCodeGoConfigs.mockImplementation(async () => ({}));
-    mocks.apiCallRequest.mockImplementation(async () => ({
-      statusCode: 200,
-      header: {},
-      bodyText: "",
-      body: {
-        object: "list",
-        data: [
-          { id: "deepseek-v4-flash", object: "model", owned_by: "opencode" },
-          { id: "kimi-k2.6", object: "model", owned_by: "opencode" },
-        ],
-      },
-    }));
+    mocks.apiCallRequest.mockImplementation(async () => apiCallResponse);
     mocks.getEntityStats.mockImplementation(async () => ({ source: [] }));
     mocks.apiKeyEntriesList.mockImplementation(async () => []);
     mocks.channelGroupsList.mockImplementation(async () => []);

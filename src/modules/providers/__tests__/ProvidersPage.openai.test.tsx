@@ -7,39 +7,48 @@ import { ThemeProvider } from "@/modules/ui/ThemeProvider";
 import { ToastProvider } from "@/modules/ui/ToastProvider";
 
 const mocks = vi.hoisted(() => ({
-  getGeminiKeys: vi.fn(async () => []),
-  getClaudeConfigs: vi.fn(async () => []),
-  getCodexConfigs: vi.fn(async () => []),
-  getVertexConfigs: vi.fn(async () => []),
-  getOpenAIProviders: vi.fn(async () => []),
+  getGeminiKeys: vi.fn(async (): Promise<any[]> => []),
+  getClaudeConfigs: vi.fn(async (): Promise<any[]> => []),
+  getCodexConfigs: vi.fn(async (): Promise<any[]> => []),
+  getVertexConfigs: vi.fn(async (): Promise<any[]> => []),
+  getOpenAIProviders: vi.fn(async (): Promise<any[]> => []),
   saveCodexConfigs: vi.fn(async (_configs: unknown[]) => ({})),
   saveOpenAIProviders: vi.fn(async (_configs: unknown[]) => ({})),
   getEntityStats: vi.fn(async () => ({ source: [] })),
   apiKeyEntriesList: vi.fn(async () => []),
   channelGroupsList: vi.fn(async () => []),
   proxiesList: vi.fn(async (): Promise<any[]> => []),
+  getModelConfigs: vi.fn(async (): Promise<any[]> => []),
+  apiCallRequest: vi.fn(async () => ({ statusCode: 200, header: {}, bodyText: "", body: {} })),
+  getAmpcode: vi.fn(async () => ({})),
+  getAmpModelMappings: vi.fn(async () => []),
 }));
 
-vi.mock("@/lib/http/apis", async (importOriginal) => {
-  const mod = await importOriginal<typeof import("@/lib/http/apis")>();
-  return {
-    ...mod,
-    providersApi: {
-      ...mod.providersApi,
-      getGeminiKeys: mocks.getGeminiKeys,
-      getClaudeConfigs: mocks.getClaudeConfigs,
-      getCodexConfigs: mocks.getCodexConfigs,
-      getVertexConfigs: mocks.getVertexConfigs,
-      getOpenAIProviders: mocks.getOpenAIProviders,
-      saveCodexConfigs: mocks.saveCodexConfigs,
-      saveOpenAIProviders: mocks.saveOpenAIProviders,
-    },
-    usageApi: {
-      ...mod.usageApi,
-      getEntityStats: mocks.getEntityStats,
-    },
-  };
-});
+vi.mock("@/lib/http/apis", () => ({
+  providersApi: {
+    getGeminiKeys: mocks.getGeminiKeys,
+    getClaudeConfigs: mocks.getClaudeConfigs,
+    getCodexConfigs: mocks.getCodexConfigs,
+    getVertexConfigs: mocks.getVertexConfigs,
+    getOpenAIProviders: mocks.getOpenAIProviders,
+    saveCodexConfigs: mocks.saveCodexConfigs,
+  },
+  usageApi: {
+    getEntityStats: mocks.getEntityStats,
+  },
+  modelsApi: {
+    getModelConfigs: mocks.getModelConfigs,
+  },
+  apiCallApi: {
+    request: mocks.apiCallRequest,
+  },
+  ampcodeApi: {
+    getAmpcode: mocks.getAmpcode,
+    getModelMappings: mocks.getAmpModelMappings,
+  },
+  getApiCallErrorMessage: (result: { bodyText?: string; statusCode?: number }) =>
+    result.bodyText || `HTTP ${result.statusCode ?? 0}`,
+}));
 
 vi.mock("@/lib/http/apis/api-keys", () => ({
   apiKeyEntriesApi: {
@@ -76,6 +85,10 @@ describe("ProvidersPage openai tab", () => {
     mocks.apiKeyEntriesList.mockReset();
     mocks.channelGroupsList.mockReset();
     mocks.proxiesList.mockReset();
+    mocks.getModelConfigs.mockReset();
+    mocks.apiCallRequest.mockReset();
+    mocks.getAmpcode.mockReset();
+    mocks.getAmpModelMappings.mockReset();
 
     mocks.getGeminiKeys.mockImplementation(async () => []);
     mocks.getClaudeConfigs.mockImplementation(async () => []);
@@ -85,6 +98,15 @@ describe("ProvidersPage openai tab", () => {
     mocks.saveOpenAIProviders.mockImplementation(async () => ({}));
     mocks.apiKeyEntriesList.mockImplementation(async () => []);
     mocks.channelGroupsList.mockImplementation(async () => []);
+    mocks.getModelConfigs.mockImplementation(async () => []);
+    mocks.apiCallRequest.mockImplementation(async () => ({
+      statusCode: 200,
+      header: {},
+      bodyText: "",
+      body: {},
+    }));
+    mocks.getAmpcode.mockImplementation(async () => ({}));
+    mocks.getAmpModelMappings.mockImplementation(async () => []);
     mocks.proxiesList.mockImplementation(async () => [
       {
         id: "hk",
@@ -178,7 +200,6 @@ describe("ProvidersPage openai tab", () => {
 
     expect(await screen.findByText("Edit Codex configuration")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: /Request/i }));
     await user.click(screen.getByRole("combobox", { name: "Proxy pool binding" }));
     await user.click(await screen.findByRole("option", { name: /Japan/ }));
     await user.click(screen.getByRole("button", { name: /Save/ }));

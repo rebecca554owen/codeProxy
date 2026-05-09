@@ -2,8 +2,17 @@ export type KeyStatBucket = { success: number; failure: number };
 
 export type StatusBlockState = "idle" | "success" | "failure" | "mixed";
 
+export type StatusBlockDetail = {
+  success: number;
+  failure: number;
+  rate: number;
+  startTime: number;
+  endTime: number;
+};
+
 export type StatusBarData = {
   blocks: StatusBlockState[];
+  blockDetails: StatusBlockDetail[];
   successRate: number;
   totalSuccess: number;
   totalFailure: number;
@@ -179,15 +188,126 @@ export function calculateStatusBarData(
     if (stat.success === 0) return "failure";
     return "mixed";
   });
+  const blockDetails: StatusBlockDetail[] = blockStats.map((stat, index) => {
+    const total = stat.success + stat.failure;
+    const startTime = windowStart + index * BLOCK_DURATION_MS;
+    return {
+      success: stat.success,
+      failure: stat.failure,
+      rate: total > 0 ? stat.success / total : -1,
+      startTime,
+      endTime: startTime + BLOCK_DURATION_MS,
+    };
+  });
 
   const total = totalSuccess + totalFailure;
   const successRate = total > 0 ? (totalSuccess / total) * 100 : 100;
 
   return {
     blocks,
+    blockDetails,
     successRate,
     totalSuccess,
     totalFailure,
+  };
+}
+
+export function buildStatusBarDataFromStats(stats: KeyStatBucket): StatusBarData {
+  const blockCount = 20;
+  const blockDurationMs = 10 * 60 * 1000;
+  const now = Date.now();
+  const windowStart = now - blockCount * blockDurationMs;
+  if (stats.success === 0 && stats.failure === 0) {
+    return {
+      blocks: Array.from({ length: blockCount }, () => "idle" as const),
+      blockDetails: Array.from({ length: blockCount }, (_, index) => {
+        const startTime = windowStart + index * blockDurationMs;
+        return {
+          success: 0,
+          failure: 0,
+          rate: -1,
+          startTime,
+          endTime: startTime + blockDurationMs,
+        };
+      }),
+      successRate: 100,
+      totalSuccess: 0,
+      totalFailure: 0,
+    };
+  }
+
+  const blocks: StatusBlockState[] = [];
+  const blockDetails: StatusBlockDetail[] = [];
+  let tempFail = stats.failure;
+  let tempSuccess = stats.success;
+
+  for (let i = 0; i < blockCount; i++) {
+    const failPart = Math.floor(tempFail / (blockCount - i));
+    const successPart = Math.floor(tempSuccess / (blockCount - i));
+    tempFail -= failPart;
+    tempSuccess -= successPart;
+
+    if (failPart === 0 && successPart === 0) {
+      blocks.push("idle");
+    } else if (failPart === 0) {
+      blocks.push("success");
+    } else if (successPart === 0) {
+      blocks.push("failure");
+    } else {
+      blocks.push("mixed");
+    }
+
+    const total = successPart + failPart;
+    const startTime = windowStart + i * blockDurationMs;
+    blockDetails.push({
+      success: successPart,
+      failure: failPart,
+      rate: total > 0 ? successPart / total : -1,
+      startTime,
+      endTime: startTime + blockDurationMs,
+    });
+  }
+
+  const total = stats.success + stats.failure;
+  return {
+    blocks,
+    blockDetails,
+    successRate: (stats.success / total) * 100,
+    totalSuccess: stats.success,
+    totalFailure: stats.failure,
+  };
+}
+
+export function fillStatusBarDetails(data: Omit<StatusBarData, "blockDetails">): StatusBarData {
+  const blockCount = data.blocks.length || 20;
+  const blockDurationMs = 10 * 60 * 1000;
+  const now = Date.now();
+  const windowStart = now - blockCount * blockDurationMs;
+  const total = data.totalSuccess + data.totalFailure;
+  return {
+    ...data,
+    blockDetails: data.blocks.map((state, index) => {
+      const startTime = windowStart + index * blockDurationMs;
+      if (state === "idle") {
+        return { success: 0, failure: 0, rate: -1, startTime, endTime: startTime + blockDurationMs };
+      }
+      const success =
+        total > 0
+          ? Math.round((data.totalSuccess / blockCount) * (state === "success" ? 1 : state === "mixed" ? 0.5 : 0))
+          : 0;
+      const failure =
+        total > 0
+          ? Math.round((data.totalFailure / blockCount) * (state === "failure" ? 1 : state === "mixed" ? 0.5 : 0))
+          : 0;
+      const blockTotal = success + failure;
+      return {
+        success,
+        failure,
+        rate: blockTotal > 0 ? success / blockTotal : -1,
+        startTime,
+        endTime: startTime + blockDurationMs,
+      };
+    }),
   };
 }
 

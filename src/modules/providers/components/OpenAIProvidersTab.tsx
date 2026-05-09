@@ -5,6 +5,7 @@ import { Button } from "@/modules/ui/Button";
 import { Card } from "@/modules/ui/Card";
 import { EmptyState } from "@/modules/ui/EmptyState";
 import { ProviderStatusBar } from "@/modules/providers/ProviderStatusBar";
+import type { StatusBarData } from "@/modules/providers/provider-usage";
 import { ToggleSwitch } from "@/modules/ui/ToggleSwitch";
 
 interface OpenAIProvidersTabProps {
@@ -17,12 +18,7 @@ interface OpenAIProvidersTabProps {
     failure: number;
   };
   getProviderStats: (provider: OpenAIProvider) => { success: number; failure: number };
-  getProviderStatusBar: (provider: OpenAIProvider) => {
-    blocks: Array<"idle" | "success" | "failure" | "mixed">;
-    successRate: number;
-    totalSuccess: number;
-    totalFailure: number;
-  };
+  getProviderStatusBar: (provider: OpenAIProvider) => StatusBarData;
   onToggleKeyEntryEnabled?: (providerIndex: number, entryIndex: number, enabled: boolean) => void;
   selectedKeys?: Set<string>;
   onToggleSelected?: (key: string, checked: boolean) => void;
@@ -68,6 +64,9 @@ export function OpenAIProvidersTab({
             const headerEntries = Object.entries(provider.headers || {});
             const stats = getProviderStats(provider);
             const statusData = getProviderStatusBar(provider);
+            const disabledKeyCount =
+              provider.apiKeyEntries?.filter((entry) => entry.disabled).length ?? 0;
+            const enabledKeyCount = (provider.apiKeyEntries?.length ?? 0) - disabledKeyCount;
 
             return (
               <div
@@ -83,8 +82,18 @@ export function OpenAIProvidersTab({
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">
-                      {provider.name}
+                    <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-900 dark:text-white">
+                      <span className="truncate">{provider.name}</span>
+                      <span
+                        className={[
+                          "rounded-full px-2 py-0.5 text-[11px] font-medium",
+                          provider.disabled
+                            ? "bg-slate-900/10 text-slate-900 dark:bg-white/15 dark:text-white"
+                            : "bg-slate-900/5 text-slate-700 dark:bg-white/10 dark:text-white/70",
+                        ].join(" ")}
+                      >
+                        {provider.disabled ? t("providers.disabled") : t("providers.enabled")}
+                      </span>
                     </p>
                     {provider.prefix ? (
                       <p className="mt-1 truncate font-mono text-xs text-slate-700 dark:text-slate-200">
@@ -126,6 +135,18 @@ export function OpenAIProvidersTab({
                                   <p className="truncate font-mono text-slate-900 dark:text-white">
                                     {entryIndex + 1}. {maskApiKey(entry.apiKey)}
                                   </p>
+                                  <div className="mt-1 flex flex-wrap items-center gap-1 text-[11px]">
+                                    <span
+                                      className={[
+                                        "rounded-full px-2 py-0.5",
+                                        entry.disabled
+                                          ? "bg-slate-900/10 text-slate-900 dark:bg-white/15 dark:text-white"
+                                          : "bg-slate-900/5 text-slate-700 dark:bg-white/10 dark:text-white/70",
+                                      ].join(" ")}
+                                    >
+                                      {entry.disabled ? t("providers.disabled") : t("providers.enabled")}
+                                    </span>
+                                  </div>
                                   {entry.proxyUrl ? (
                                     <p className="mt-0.5 truncate font-mono text-slate-600 dark:text-white/55">
                                       proxy: {entry.proxyUrl}
@@ -171,6 +192,18 @@ export function OpenAIProvidersTab({
                         {t("providers.models_label")}: {provider.models?.length ?? 0}
                       </span>
                       <span>·</span>
+                      <span>
+                        {t("providers.api_key")}: {provider.apiKeyEntries?.length ?? 0}
+                      </span>
+                      <span>·</span>
+                      <span>{t("providers.enabled")}: {enabledKeyCount}</span>
+                      {disabledKeyCount > 0 ? (
+                        <>
+                          <span>·</span>
+                          <span>{t("providers.disabled")}: {disabledKeyCount}</span>
+                        </>
+                      ) : null}
+                      <span>·</span>
                       <span>{t("providers.success_stats", { count: stats.success })}</span>
                       <span>·</span>
                       <span>{t("providers.failed_stats", { count: stats.failure })}</span>
@@ -184,9 +217,9 @@ export function OpenAIProvidersTab({
 
                     {provider.models?.length ? (
                       <div className="mt-2 flex flex-wrap gap-1">
-                        {provider.models.map((model) => (
+                        {provider.models.map((model, modelIndex) => (
                           <span
-                            key={model.name}
+                            key={`${model.name ?? "model"}:${model.alias ?? ""}:${model.priority ?? ""}:${modelIndex}`}
                             className="rounded-full bg-slate-900 px-2 py-0.5 text-[11px] text-white dark:bg-white dark:text-neutral-950"
                             title={
                               model.alias && model.alias !== model.name

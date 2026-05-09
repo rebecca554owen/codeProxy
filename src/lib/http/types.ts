@@ -180,6 +180,7 @@ export interface ProviderApiKeyEntry {
 
 export interface OpenAIProvider {
   name: string;
+  disabled?: boolean;
   baseUrl?: string;
   prefix?: string;
   headers?: Record<string, string>;
@@ -194,6 +195,7 @@ export interface ProviderSimpleConfig {
   name?: string;
   prefix?: string;
   baseUrl?: string;
+  priority?: number;
   proxyUrl?: string;
   proxyId?: string;
   headers?: Record<string, string>;

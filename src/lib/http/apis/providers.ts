@@ -44,6 +44,10 @@ export const providersApi = {
         const name = normalizeString(item.name) ?? undefined;
         const prefix = normalizeString(item.prefix) ?? undefined;
         const baseUrl = normalizeString(item["base-url"] ?? item.baseUrl) ?? undefined;
+        const priority =
+          typeof item.priority === "number" && Number.isFinite(item.priority)
+            ? item.priority
+            : undefined;
         const proxyId = normalizeString(item["proxy-id"] ?? item.proxyId) ?? undefined;
         const headers = normalizeHeaders(item.headers);
         const models = normalizeModels(item.models);
@@ -55,6 +59,7 @@ export const providersApi = {
           ...(name ? { name } : {}),
           ...(prefix ? { prefix } : {}),
           ...(baseUrl ? { baseUrl } : {}),
+          ...(priority !== undefined ? { priority } : {}),
           ...(proxyId ? { proxyId } : {}),
           ...(headers ? { headers } : {}),
           ...(models ? { models } : {}),
@@ -85,6 +90,10 @@ export const providersApi = {
         const name = normalizeString(item.name) ?? undefined;
         const prefix = normalizeString(item.prefix) ?? undefined;
         const baseUrl = normalizeString(item["base-url"] ?? item.baseUrl) ?? undefined;
+        const priority =
+          typeof item.priority === "number" && Number.isFinite(item.priority)
+            ? item.priority
+            : undefined;
         const proxyUrl = normalizeString(item["proxy-url"] ?? item.proxyUrl) ?? undefined;
         const proxyId = normalizeString(item["proxy-id"] ?? item.proxyId) ?? undefined;
         const headers = normalizeHeaders(item.headers);
@@ -97,6 +106,7 @@ export const providersApi = {
           ...(name ? { name } : {}),
           ...(prefix ? { prefix } : {}),
           ...(baseUrl ? { baseUrl } : {}),
+          ...(priority !== undefined ? { priority } : {}),
           ...(proxyUrl ? { proxyUrl } : {}),
           ...(proxyId ? { proxyId } : {}),
           ...(headers ? { headers } : {}),
@@ -167,6 +177,10 @@ export const providersApi = {
         const name = normalizeString(item.name) ?? undefined;
         const prefix = normalizeString(item.prefix) ?? undefined;
         const baseUrl = normalizeString(item["base-url"] ?? item.baseUrl) ?? undefined;
+        const priority =
+          typeof item.priority === "number" && Number.isFinite(item.priority)
+            ? item.priority
+            : undefined;
         const proxyUrl = normalizeString(item["proxy-url"] ?? item.proxyUrl) ?? undefined;
         const proxyId = normalizeString(item["proxy-id"] ?? item.proxyId) ?? undefined;
         const headers = normalizeHeaders(item.headers);
@@ -181,6 +195,7 @@ export const providersApi = {
           ...(name ? { name } : {}),
           ...(prefix ? { prefix } : {}),
           ...(baseUrl ? { baseUrl } : {}),
+          ...(priority !== undefined ? { priority } : {}),
           ...(proxyUrl ? { proxyUrl } : {}),
           ...(proxyId ? { proxyId } : {}),
           ...(headers ? { headers } : {}),
@@ -275,6 +290,10 @@ export const providersApi = {
         const name = normalizeString(item.name) ?? undefined;
         const prefix = normalizeString(item.prefix) ?? undefined;
         const baseUrl = normalizeString(item["base-url"] ?? item.baseUrl) ?? undefined;
+        const priority =
+          typeof item.priority === "number" && Number.isFinite(item.priority)
+            ? item.priority
+            : undefined;
         const proxyUrl = normalizeString(item["proxy-url"] ?? item.proxyUrl) ?? undefined;
         const proxyId = normalizeString(item["proxy-id"] ?? item.proxyId) ?? undefined;
         const headers = normalizeHeaders(item.headers);
@@ -284,6 +303,7 @@ export const providersApi = {
           ...(name ? { name } : {}),
           ...(prefix ? { prefix } : {}),
           ...(baseUrl ? { baseUrl } : {}),
+          ...(priority !== undefined ? { priority } : {}),
           ...(proxyUrl ? { proxyUrl } : {}),
           ...(proxyId ? { proxyId } : {}),
           ...(headers ? { headers } : {}),
@@ -316,6 +336,7 @@ export const providersApi = {
         const headers = normalizeHeaders(item.headers);
         const models = normalizeModels(item.models);
         const apiKeyEntries = normalizeApiKeyEntries(item["api-key-entries"] ?? item.apiKeyEntries);
+        const disabled = item.disabled === true;
         const priorityRaw = item.priority;
         const priority =
           typeof priorityRaw === "number" && Number.isFinite(priorityRaw) ? priorityRaw : undefined;
@@ -327,6 +348,7 @@ export const providersApi = {
           ...(headers ? { headers } : {}),
           ...(models ? { models } : {}),
           ...(apiKeyEntries ? { apiKeyEntries } : {}),
+          ...(disabled ? { disabled } : {}),
           ...(priority !== undefined ? { priority } : {}),
           ...(testModel ? { testModel } : {}),
         };
