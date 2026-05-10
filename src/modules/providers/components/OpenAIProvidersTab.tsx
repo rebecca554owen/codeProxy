@@ -78,8 +78,7 @@ export function OpenAIProvidersTab({
             const disabledKeyCount =
               provider.apiKeyEntries?.filter((entry) => entry.disabled).length ?? 0;
             const enabledKeyCount = (provider.apiKeyEntries?.length ?? 0) - disabledKeyCount;
-            const providerEnabled = provider.disabled !== true;
-            const effectiveEnabled = providerEnabled && enabledKeyCount > 0;
+            const providerEnabled = enabledKeyCount > 0;
             const stats = getProviderStats(provider);
             const statusData = getProviderStatusBar(provider);
 
@@ -97,19 +96,21 @@ export function OpenAIProvidersTab({
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-900 dark:text-white">
-                      <span className="truncate">{provider.name}</span>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">
+                        {provider.name}
+                      </p>
                       <span
                         className={[
-                          "rounded-full px-2 py-0.5 text-[11px] font-medium",
-                          effectiveEnabled
-                            ? "bg-slate-900/5 text-slate-700 dark:bg-white/10 dark:text-white/70"
-                            : "bg-slate-900/10 text-slate-900 dark:bg-white/15 dark:text-white",
+                          "rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                          providerEnabled
+                            ? "bg-emerald-600/10 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200"
+                            : "bg-amber-500/15 text-amber-700 dark:text-amber-200",
                         ].join(" ")}
                       >
-                        {effectiveEnabled ? t("providers.enabled") : t("providers.disabled")}
+                        {providerEnabled ? t("providers.enabled") : t("providers.disabled")}
                       </span>
-                    </p>
+                    </div>
                     {provider.prefix ? (
                       <p className="mt-1 truncate font-mono text-xs text-slate-700 dark:text-slate-200">
                         prefix: {provider.prefix}

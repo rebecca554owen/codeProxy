@@ -173,6 +173,62 @@ export function useOpenAIProviderEditor({
     [notify, openaiProviders, setOpenaiProviders, t],
   );
 
+  const setProviderEntriesEnabled = useCallback(
+    (provider: OpenAIProvider, enabled: boolean): OpenAIProvider => ({
+      ...provider,
+      apiKeyEntries: (provider.apiKeyEntries ?? []).map((entry) =>
+        enabled ? { ...entry, disabled: undefined } : { ...entry, disabled: true },
+      ),
+    }),
+    [],
+  );
+
+  const toggleOpenAIProviderEnabled = useCallback(
+    async (providerIndex: number, enabled: boolean) => {
+      const provider = openaiProviders[providerIndex];
+      if (!provider || !provider.apiKeyEntries?.length) return;
+
+      const prev = openaiProviders;
+      const hasEnabledEntry = provider.apiKeyEntries.some((entry) => entry.disabled !== true);
+      const shouldEnableAll = enabled && !hasEnabledEntry;
+      const next = prev.map((item, itemIndex) => {
+        if (itemIndex !== providerIndex) return item;
+        if (!enabled) {
+          return setProviderEntriesEnabled(item, false);
+        }
+        if (shouldEnableAll || (item.apiKeyEntries?.length ?? 0) <= 1) {
+          return setProviderEntriesEnabled(item, true);
+        }
+        return item;
+      });
+
+      setOpenaiProviders(next);
+      try {
+        await providersApi.saveOpenAIProviders(next);
+        notify({
+          type: "success",
+          message: enabled ? t("providers.toggle_enabled") : t("providers.toggle_disabled"),
+        });
+        startRefreshTransition(() => void refreshAll());
+      } catch (err: unknown) {
+        setOpenaiProviders(prev);
+        notify({
+          type: "error",
+          message: err instanceof Error ? err.message : t("providers.update_failed"),
+        });
+      }
+    },
+    [
+      notify,
+      openaiProviders,
+      refreshAll,
+      setOpenaiProviders,
+      setProviderEntriesEnabled,
+      startRefreshTransition,
+      t,
+    ],
+  );
+
   const toggleOpenAIKeyEntryEnabled = useCallback(
     async (providerIndex: number, entryIndex: number, enabled: boolean) => {
       const provider = openaiProviders[providerIndex];
@@ -216,40 +272,6 @@ export function useOpenAIProviderEditor({
       startRefreshTransition,
       t,
     ],
-  );
-
-  const toggleOpenAIProviderEnabled = useCallback(
-    async (providerIndex: number, enabled: boolean) => {
-      const provider = openaiProviders[providerIndex];
-      if (!provider) return;
-
-      const prev = openaiProviders;
-      const next = prev.map((item, itemIndex) =>
-        itemIndex === providerIndex
-          ? {
-              ...item,
-              ...(enabled ? { disabled: undefined } : { disabled: true }),
-            }
-          : item,
-      );
-
-      setOpenaiProviders(next);
-      try {
-        await providersApi.saveOpenAIProviders(next);
-        notify({
-          type: "success",
-          message: enabled ? t("providers.toggle_enabled") : t("providers.toggle_disabled"),
-        });
-        startRefreshTransition(() => void refreshAll());
-      } catch (err: unknown) {
-        setOpenaiProviders(prev);
-        notify({
-          type: "error",
-          message: err instanceof Error ? err.message : t("providers.update_failed"),
-        });
-      }
-    },
-    [notify, openaiProviders, refreshAll, setOpenaiProviders, startRefreshTransition, t],
   );
 
   const discoverModels = useCallback(async () => {

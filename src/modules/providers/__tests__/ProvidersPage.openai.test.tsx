@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -62,6 +62,15 @@ function getMocks() {
 }
 
 const mocks = getMocks();
+
+function getProviderCard(name: string): HTMLElement {
+  const title = screen.getByText(name);
+  const card = title.closest("div.group");
+  if (!card) {
+    throw new Error(`Provider card not found for ${name}`);
+  }
+  return card as HTMLElement;
+}
 
 vi.mock("@/lib/http/apis", () => ({
   providersApi: {
@@ -334,12 +343,13 @@ describe("ProvidersPage openai tab", () => {
     });
   });
 
-  test("shows provider as disabled when all key entries are disabled", async () => {
+  test("shows provider toggle as disabled when all key entries are disabled and re-enables all keys", async () => {
+    const user = userEvent.setup();
     mocks.getOpenAIProviders.mockImplementation(
       async () =>
         [
           {
-            name: "OpenAI Disabled By Keys",
+            name: "OpenAI Main",
             baseUrl: "https://example.com/v1",
             apiKeyEntries: [
               { apiKey: "sk-openai-disabled-a-1234567890", disabled: true },
@@ -362,8 +372,134 @@ describe("ProvidersPage openai tab", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText("OpenAI Disabled By Keys")).toBeInTheDocument();
-    expect(screen.getAllByText("Disabled").length).toBeGreaterThan(0);
-    expect(screen.getByTestId("providers-tab-scroll")).toHaveClass("overflow-y-auto");
+    expect(await screen.findByText("OpenAI Main")).toBeInTheDocument();
+    const providerSwitch = within(getProviderCard("OpenAI Main")).getByRole("switch", {
+      name: /^Enable$/i,
+    });
+    expect(providerSwitch).toHaveAttribute("aria-checked", "false");
+
+    await user.click(providerSwitch);
+
+    await waitFor(() => {
+      expect(mocks.saveOpenAIProviders).toHaveBeenCalledWith([
+        expect.objectContaining({
+          name: "OpenAI Main",
+          apiKeyEntries: [
+            expect.objectContaining({
+              apiKey: "sk-openai-disabled-a-1234567890",
+            }),
+            expect.objectContaining({
+              apiKey: "sk-openai-disabled-b-1234567890",
+            }),
+          ],
+        }),
+      ]);
+    });
+
+    const saved = mocks.saveOpenAIProviders.mock.calls.at(-1)?.[0] as any[];
+    expect(saved?.[0]?.apiKeyEntries?.every((entry: any) => entry.disabled !== true)).toBe(true);
+  });
+
+  test("provider toggle disables all key entries when any key is enabled", async () => {
+    const user = userEvent.setup();
+    mocks.getOpenAIProviders.mockImplementation(
+      async () =>
+        [
+          {
+            name: "OpenAI Main",
+            baseUrl: "https://example.com/v1",
+            apiKeyEntries: [
+              { apiKey: "sk-openai-enabled-a-1234567890" },
+              { apiKey: "sk-openai-disabled-b-1234567890", disabled: true },
+            ],
+            models: [{ name: "gpt-4.1" }],
+          },
+        ] as any,
+    );
+
+    render(
+      <MemoryRouter initialEntries={["/ai-providers/openai"]}>
+        <ThemeProvider>
+          <ToastProvider>
+            <Routes>
+              <Route path="/ai-providers/*" element={<ProvidersPage />} />
+            </Routes>
+          </ToastProvider>
+        </ThemeProvider>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("OpenAI Main")).toBeInTheDocument();
+    const providerSwitch = within(getProviderCard("OpenAI Main")).getByRole("switch", {
+      name: /^Enable$/i,
+    });
+    expect(providerSwitch).toHaveAttribute("aria-checked", "true");
+
+    await user.click(providerSwitch);
+
+    const saved = await waitFor(() => {
+      const call = mocks.saveOpenAIProviders.mock.calls.at(-1)?.[0] as any[] | undefined;
+      expect(call).toBeTruthy();
+      return call;
+    });
+
+    expect(saved?.[0]?.apiKeyEntries).toEqual([
+      expect.objectContaining({
+        apiKey: "sk-openai-enabled-a-1234567890",
+        disabled: true,
+      }),
+      expect.objectContaining({
+        apiKey: "sk-openai-disabled-b-1234567890",
+        disabled: true,
+      }),
+    ]);
+  });
+
+  test("provider toggle re-enables a single disabled key entry", async () => {
+    const user = userEvent.setup();
+    mocks.getOpenAIProviders.mockImplementation(
+      async () =>
+        [
+          {
+            name: "OpenAI Solo",
+            baseUrl: "https://example.com/v1",
+            apiKeyEntries: [{ apiKey: "sk-openai-solo-1234567890", disabled: true }],
+            models: [{ name: "gpt-4.1" }],
+          },
+        ] as any,
+    );
+
+    render(
+      <MemoryRouter initialEntries={["/ai-providers/openai"]}>
+        <ThemeProvider>
+          <ToastProvider>
+            <Routes>
+              <Route path="/ai-providers/*" element={<ProvidersPage />} />
+            </Routes>
+          </ToastProvider>
+        </ThemeProvider>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("OpenAI Solo")).toBeInTheDocument();
+    const providerSwitch = within(getProviderCard("OpenAI Solo")).getByRole("switch", {
+      name: /^Enable$/i,
+    });
+    expect(providerSwitch).toHaveAttribute("aria-checked", "false");
+
+    await user.click(providerSwitch);
+
+    const saved = await waitFor(() => {
+      const call = mocks.saveOpenAIProviders.mock.calls.at(-1)?.[0] as any[] | undefined;
+      expect(call).toBeTruthy();
+      return call;
+    });
+
+    expect(saved?.[0]?.apiKeyEntries).toEqual([
+      expect.objectContaining({
+        apiKey: "sk-openai-solo-1234567890",
+      }),
+    ]);
+    expect(saved?.[0]?.apiKeyEntries?.[0]?.disabled).not.toBe(true);
   });
 });
